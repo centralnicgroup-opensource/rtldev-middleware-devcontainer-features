@@ -51,9 +51,17 @@ check "timezone applied" grep -q "Europe/Berlin" /etc/timezone
 # ~/.claude/settings.json to work; without it that hook exits 127 on every Bash call.
 check "rtk installed" test -x /usr/local/bin/rtk
 check "rtk runs" rtk --version
-check "rtk reports the pinned version" bash -c 'rtk --version | grep -q "0.45.0"'
-check "rtk version recorded" \
-    grep -q 'DEVBASE_RTK_VERSION="0.45.0"' /usr/local/share/devbase/config.env
+# Asserted against the recorded value rather than a literal. The pinned version used to
+# be repeated here twice on top of the manifest and install.sh, so a bump meant four
+# edits and only one of them changed what shipped. scripts/validate-features.sh now keeps
+# the manifest and install.sh in step; what matters here is that the binary on PATH is
+# the version the Feature was actually configured to install.
+check "rtk version recorded" bash -c '
+    . /usr/local/share/devbase/config.env
+    [ -n "${DEVBASE_RTK_VERSION}" ]'
+check "rtk reports the version the Feature recorded" bash -c '
+    . /usr/local/share/devbase/config.env
+    rtk --version | grep -qF "${DEVBASE_RTK_VERSION}"'
 # rtk init -g must never have run: it would rewrite the bind-mounted ~/.claude, which is
 # shared with the host and already carries the hook.
 check "claude settings untouched" bash -c '! test -e "${HOME}/.claude/settings.json"'
@@ -82,5 +90,133 @@ check "execute_with_indent reports the real exit code" bash -c \
 check "banner runs without a config file" bash -c 'cd /tmp && devbase-env-info'
 check "banner prints the container group" bash -c 'cd /tmp && devbase-env-info | grep -q "Container"'
 check "banner reports the OS" bash -c 'cd /tmp && devbase-env-info | grep -qi "ubuntu"'
+
+# --- config.env must be sourceable -------------------------------------------
+# post-create sources it on its third line under `set -euo pipefail`, so a file that does
+# not parse aborts post-create before a single step runs — the one failure this Feature
+# cannot absorb, since a container that refuses to come up is not fixable from a terminal.
+# Option values are escaped on the way in for exactly this reason.
+check "config.env parses as shell" sh -n /usr/local/share/devbase/config.env
+
+# --- setup.sh steps, asserted as effects -------------------------------------
+# These steps are what the Feature is for, and until now only the *recording* of their
+# option values was covered: nothing proved the step itself did anything. Each is called
+# directly rather than through post-create so the assertion names the behaviour that
+# broke rather than "post-create failed somewhere".
+
+# The --replace-all/--add pair has to leave exactly gh's helper in the local config. The
+# function already verifies its own write, because a foreign-owned .git makes that write
+# fail silently and a swallowed failure here surfaces much later as a password prompt.
+check "gh credential helper is written to the workspace git config" bash -c '
+    set -e
+    rm -rf /tmp/ghws && mkdir -p /tmp/ghws && cd /tmp/ghws && git init -q .
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_gh_credential_helper >/dev/null
+    git config --local --get-all credential.helper | grep -qxF "!gh auth git-credential"'
+
+# Outside a working tree it must skip: some frames run post-create before anything is
+# cloned, and that is a normal state rather than a fault.
+check "gh credential helper skips outside a git tree" bash -c '
+    set -e
+    rm -rf /tmp/nogitws && mkdir -p /tmp/nogitws && cd /tmp/nogitws
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_gh_credential_helper | grep -q "Not a git working tree"'
+
+# The history symlink is the whole of historyPersistence, and it depends on a host mount
+# the consuming frame provides. All three branches matter, because a missing mount is a
+# supported configuration and must stay a detail rather than an error.
+check "shell history is linked when the host mount exists" bash -c '
+    set -e
+    sudo mkdir -p /WSL_USER && sudo touch /WSL_USER/.zsh_history
+    sudo chown -R "$(id -un)" /WSL_USER
+    rm -f "${HOME}/.zsh_history"
+    export CI=false GITHUB_ACTIONS=false
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_history_persistence >/dev/null
+    test -L "${HOME}/.zsh_history"
+    [ "$(readlink "${HOME}/.zsh_history")" = "/WSL_USER/.zsh_history" ]'
+
+check "shell history stays container-local without the host mount" bash -c '
+    set -e
+    sudo rm -rf /WSL_USER
+    rm -f "${HOME}/.zsh_history"
+    export CI=false GITHUB_ACTIONS=false
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_history_persistence | grep -q "history stays container-local"
+    ! test -e "${HOME}/.zsh_history"'
+
+check "shell history is skipped in CI" bash -c '
+    set -e
+    export CI=true
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_history_persistence | grep -q "Skipping history persistence in CI"'
+
+# devbase_setup_project_dependencies is the step every consuming repository depends on,
+# and it had no coverage whatsoever: every scenario ran post-create from /tmp, where no
+# manifest exists, so neither the composer nor the Node branch was ever entered.
+#
+# This base image has neither composer nor pnpm, which makes it the right place to assert
+# the rule that a manifest whose tool is absent is reported and skipped, never fatal.
+check "a composer.json without composer is reported, not fatal" bash -c '
+    set -e
+    rm -rf /tmp/phpws && mkdir -p /tmp/phpws && cd /tmp/phpws
+    printf "{}\n" > composer.json
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_project_dependencies 2>&1 | grep -q "composer is missing"'
+
+check "a package.json without pnpm is reported, not fatal" bash -c '
+    set -e
+    rm -rf /tmp/nodews && mkdir -p /tmp/nodews && cd /tmp/nodews
+    printf "{}\n" > package.json
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_project_dependencies 2>&1 | grep -q "pnpm is missing"'
+
+check "a workspace with no manifest is a detail, not a fault" bash -c '
+    set -e
+    rm -rf /tmp/barews && mkdir -p /tmp/barews && cd /tmp/barews
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_project_dependencies | grep -q "nothing to install"'
+
+check "seeds .env from .env.example" bash -c '
+    set -e
+    rm -rf /tmp/envws && mkdir -p /tmp/envws && cd /tmp/envws
+    printf "TOKEN=example\n" > .env.example
+    export CI=false GITHUB_ACTIONS=false
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_env_file >/dev/null
+    grep -q "TOKEN=example" .env'
+
+# Overwriting a developer's .env would destroy local credentials, so this one matters
+# more than the creation case.
+check "an existing .env is never overwritten" bash -c '
+    set -e
+    cd /tmp/envws && printf "TOKEN=mine\n" > .env
+    export CI=false GITHUB_ACTIONS=false
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_env_file >/dev/null
+    grep -q "TOKEN=mine" .env'
+
+# --- post-attach --------------------------------------------------------------
+# post-attach had no coverage at all, which left autoloadEnvScript as the only option with
+# no effect asserted in either direction. Kept last in this file on purpose: the ~/.zshenv
+# it writes is sourced by every zsh started afterwards, the banner checks above included.
+check "post-attach adds the workspace env.sh to ~/.zshenv exactly once" bash -c '
+    set -e
+    rm -rf /tmp/attachws && mkdir -p /tmp/attachws && cd /tmp/attachws
+    printf "export DEVBASE_ATTACH_PROBE=1\n" > env.sh
+    rm -f "${HOME}/.zshenv"
+    zsh /usr/local/bin/devbase-post-attach.sh >/dev/null 2>&1
+    grep -qF "/tmp/attachws/env.sh" "${HOME}/.zshenv"
+    # It runs on *every* attach, so the marker has to stop a second line being appended.
+    zsh /usr/local/bin/devbase-post-attach.sh >/dev/null 2>&1
+    [ "$(grep -cF "/tmp/attachws/env.sh" "${HOME}/.zshenv")" -eq 1 ]
+    rm -f "${HOME}/.zshenv"'
+
+check "post-attach leaves ~/.zshenv alone when the workspace has no env.sh" bash -c '
+    set -e
+    rm -rf /tmp/noenvws && mkdir -p /tmp/noenvws && cd /tmp/noenvws
+    rm -f "${HOME}/.zshenv"
+    zsh /usr/local/bin/devbase-post-attach.sh >/dev/null 2>&1
+    ! test -e "${HOME}/.zshenv"'
 
 reportResults

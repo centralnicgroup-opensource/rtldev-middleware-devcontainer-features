@@ -45,4 +45,23 @@ check "timezone left untouched" bash -c \
 check "post-create succeeds with every step disabled" \
     bash -c 'cd /tmp && zsh /usr/local/bin/devbase-post-create.sh'
 
+# Every option here is empty or false, which makes this the scenario that proves the
+# escaping of the recorded values does not mangle an empty string into something
+# unparseable — post-create sources this file before it does anything else.
+check "config.env parses as shell with every option empty or off" \
+    sh -n /usr/local/share/devbase/config.env
+
+# autoloadEnvScript was the one option with no effect assertion in either direction: only
+# its recorded value was ever checked. With it off, a workspace that *does* have an env.sh
+# must still be left alone.
+check "autoload opt-out recorded" \
+    grep -q 'DEVBASE_AUTOLOAD_ENV_SCRIPT="false"' /usr/local/share/devbase/config.env
+check "post-attach does not autoload env.sh when disabled" bash -c '
+    set -e
+    rm -rf /tmp/attachws && mkdir -p /tmp/attachws && cd /tmp/attachws
+    printf "export DEVBASE_ATTACH_PROBE=1\n" > env.sh
+    rm -f "${HOME}/.zshenv"
+    zsh /usr/local/bin/devbase-post-attach.sh >/dev/null 2>&1
+    ! test -e "${HOME}/.zshenv"'
+
 reportResults
