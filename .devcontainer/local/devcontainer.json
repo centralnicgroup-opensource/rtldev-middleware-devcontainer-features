@@ -1,0 +1,45 @@
+{
+  // ALTERNATE CONFIG — the working-tree variant. VS Code offers a picker when a
+  // repository has more than one devcontainer.json; pick "devbase (working tree)" to
+  // build your environment from features/src/ instead of from the registry.
+  //
+  // Run `pnpm devbase:local` first. It copies features/src/devbase to ./devbase here,
+  // which is gitignored. The copy is unavoidable: the CLI refuses a local Feature path
+  // that resolves outside .devcontainer/ (so ../../features/src/devbase is rejected) and
+  // fails the fetch step on a symlink. Because this config sits at .devcontainer/local/,
+  // its "./devbase" resolves to .devcontainer/local/devbase — inside .devcontainer/, so
+  // it is accepted.
+  //
+  // Re-run `pnpm devbase:local` after every edit to the Feature, then rebuild. Forgetting
+  // is the one hazard of a copy, which is why the default config uses the registry and
+  // why `pnpm features:test` — which always reads features/src/ directly — is the normal
+  // iteration loop.
+  //
+  // Deliberately leaner than the default config: this exists to exercise the Feature, not
+  // to be a comfortable daily environment.
+  "name": "dstack-devcontainer-features (working tree)",
+  "image": "mcr.microsoft.com/devcontainers/base:2-ubuntu-24.04",
+
+  "workspaceMount": "source=${localWorkspaceFolder},target=/usr/share/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+  "workspaceFolder": "/usr/share/${localWorkspaceFolderBasename}",
+  "shutdownAction": "stopContainer",
+
+  "features": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "lts"
+    },
+    // Needed to run `pnpm features:test` from inside this container.
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "./devbase": {}
+  },
+
+  "remoteUser": "vscode",
+
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,readonly",
+    "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,consistency=cached",
+    "source=${localEnv:HOME}${localEnv:USERPROFILE},target=/WSL_USER,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
+  ]
+}

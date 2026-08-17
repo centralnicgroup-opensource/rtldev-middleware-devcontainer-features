@@ -1,0 +1,106 @@
+name: Release
+"on":
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# Two merges to main in quick succession would otherwise run two releases at once, both
+# deciding a next version from a history the other is still writing, and both pushing a
+# bump commit.
+#
+# cancel-in-progress is deliberately false: by the time a second run starts, the first
+# may already have tagged, published to ghcr.io or pushed the version bump, and
+# semantic-release is not safely interruptible half way through that. Queueing costs a
+# few minutes; cancelling costs a half-released version.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Release and publish are one job on purpose.
+#
+# semantic-release bumps `version` in devcontainer-feature.json (via the replace plugin)
+# and commits it with @semantic-release/git. That commit is pushed with GITHUB_TOKEN, and
+# pushes made with GITHUB_TOKEN do not trigger workflows — so a separate publish workflow
+# listening on `push` would never fire for exactly the commit that matters. Publishing in
+# the same job, after semantic-release has run, is what makes the bumped version the one
+# that reaches ghcr.io.
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # semantic-release commits the version bump and creates the release
+      issues: write
+      pull-requests: write
+      packages: write # pushes the Feature artifacts to ghcr.io
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # semantic-release reads the full history to work out the next version.
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The env var name and the secret name differ on purpose, and both halves are
+      # load-bearing: the teams-notify plugin reads TEAMS_NOTIFICATION_URI from the
+      # environment, while the webhook itself lives in the org-wide secret
+      # RTLDEV_MW_CI_NOTIFICATION_URI. This used to read secrets.TEAMS_NOTIFICATION_URI —
+      # a secret that does not exist, so it resolved to the empty string.
+      #
+      # That was not a cosmetic miss. The plugin implements semantic-release's
+      # verifyConditions hook and throws NoTeamsWebhook on an empty webhook, so the
+      # release aborted on its first step and the first release could never be cut. It
+      # fails safe — before any tag, commit or publish — which is also why it would have
+      # looked like an unrelated release failure rather than a missing secret.
+      - name: Semantic release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEAMS_NOTIFICATION_URI: ${{ secrets.RTLDEV_MW_CI_NOTIFICATION_URI }}
+        run: pnpm exec semantic-release
+
+      # The working tree now carries whatever version semantic-release decided on, so the
+      # publish below ships that. Publishing is idempotent — a version already present in
+      # the registry is skipped, not overwritten — so a run in which semantic-release
+      # released nothing is a harmless no-op rather than something to guard with an `if`.
+      - name: Publish features
+        uses: devcontainers/action@v1
+        with:
+          publish-features: "true"
+          base-path-to-features: features/src
+          generate-docs: "true"
+          disable-repo-tagging: "true"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # generate-docs writes the per-feature README.md but does not push it.
+      #
+      # The status check is scoped to features/, which is the only path staged below. It
+      # used to look at the whole tree: any dirt outside features/ — a lockfile the
+      # install touched, a stray file from an earlier step — entered this branch with
+      # nothing to stage, and `git commit` then exited non-zero for "nothing to commit".
+      # That turned the job red *after* semantic-release had tagged and the publish had
+      # succeeded, which points the investigation at the release rather than at a
+      # cosmetic docs commit.
+      - name: Push generated documentation
+        run: |
+          if [ -z "$(git status --porcelain features/)" ]; then
+            echo "No documentation changes to push."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add features/
+          git commit -m "docs(features): regenerate feature documentation [skip ci]"
+          git push

@@ -1,0 +1,156 @@
+name: Lint
+"on":
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# These jobs are defined here rather than delegated to
+# rtldev-middleware-shareable-workflows because the shared lint workflows are
+# language-oriented (php-sdk-lint, node-sdk-lint) and this repository is neither: it
+# ships shell scripts and container metadata. Delegating would mean running a PHP or
+# Node analyser over a repository that has no PHP or application code.
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - name: Install pnpm
+        run: npm install -g pnpm
+      # `pnpm run shellcheck` rather than an inline file list. The list used to live
+      # both here and in package.json and had already drifted — this job checked
+      # .husky/pre-commit and the script did not, so a broken hook passed `pnpm lint`
+      # locally and only failed after a push. One list, one command, same in both
+      # places.
+      #
+      # No dependency install: ShellCheck is preinstalled on the runner and the
+      # script only shells out to it. A defect in this shell code breaks every
+      # consuming repository's container, so warnings are errors rather than advisory.
+      - name: ShellCheck
+        run: pnpm run shellcheck
+
+  feature-metadata:
+    name: Feature metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - name: Install pnpm
+        run: npm install -g pnpm
+      # Malformed metadata fails at publish time with a far worse error than this, and
+      # only after a merge to main. The checks themselves live in
+      # scripts/validate-features.sh so that `pnpm features:validate` runs exactly what
+      # CI runs — the previous inline copy had grown a directory/id check the local
+      # script did not have.
+      - name: Validate devcontainer-feature.json
+        run: pnpm run features:validate
+
+  prettier:
+    name: Prettier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - name: Install pnpm
+        run: npm install -g pnpm
+      # Prettier comes from the lockfile, not from `npx --yes prettier@3`. That form
+      # resolved the latest 3.x and ignored package.json entirely, so CI formatted with
+      # a different Prettier than the working tree does: an upstream publish that adds
+      # a formatting rule turns this job red with no commit here, while `pnpm lint`
+      # stays green locally. Same reasoning as the devcontainer CLI in
+      # test-features.yml.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # Gated rather than advisory: unformatted Markdown should be a red build, since
+      # this repository's README is the documentation consumers actually read.
+      - name: Check formatting
+        run: pnpm run prettier
+
+  actionlint:
+    name: Actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - name: Install pnpm
+        run: npm install -g pnpm
+      # The same pinned actionlint the working tree runs, rather than
+      # reviewdog/action-actionlint. Two reasons beyond dropping a third-party action:
+      # the reviewer used `reporter: github-pr-check`, which has nothing to report on a
+      # push to main, and a floating action version can change what passes without a
+      # commit here.
+      #
+      # This job cannot catch a syntax error in *this* file — an unparseable workflow
+      # never starts, so the job that would report it does not run either. That is why
+      # `pnpm lint` runs the same script locally; see scripts/lint-workflows.sh.
+      - name: Actionlint
+        run: pnpm run lint:workflows
+
+  hadolint:
+    name: Hadolint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: .devcontainer/Dockerfile
+
+  # One check for branch protection to require, so adding a job above does not silently
+  # stop being required.
+  ci-success:
+    name: "Lint: completed"
+    needs: [shellcheck, feature-metadata, prettier, actionlint, hadolint]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      # Checked result by result. This was `echo '<joined>' | grep -qvw success`, which
+      # never failed on a *partial* failure: join() produces a single line, that line
+      # contains the word "success" as soon as any one job succeeded, and `grep -v`
+      # then discarded it and exited non-zero — so "success failure success" was
+      # reported as green. Since this is the only check branch protection requires, a
+      # red ShellCheck or Prettier job was mergeable. It caught nothing short of every
+      # job failing at once.
+      #
+      # Note the single quotes in the expression. A GitHub expression accepts only
+      # single-quoted string literals, and the double-quoted join(needs.*.result, " ")
+      # this file used to carry made the *entire workflow* unparseable — so none of the
+      # jobs above ever ran, on any commit, and the run showed up named after the file
+      # path rather than "Lint". Both defects hid each other: an unparseable file cannot
+      # report that its gate is broken.
+      #
+      # The results go through env rather than being interpolated into the script, so
+      # the expression cannot be parsed as shell.
+      - name: Check results
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          failed=0
+          for result in ${RESULTS}; do
+            if [ "${result}" != "success" ]; then
+              failed=1
+            fi
+          done
+          if [ "${failed}" -ne 0 ]; then
+            echo "One or more lint jobs did not succeed: ${RESULTS}"
+            exit 1
+          fi
+          echo "All lint jobs succeeded: ${RESULTS}"

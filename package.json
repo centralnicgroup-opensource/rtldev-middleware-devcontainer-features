@@ -1,0 +1,68 @@
+{
+  "name": "rtldev-middleware-devcontainer-features",
+  "description": "Shared devcontainer Features for RTLDEV middleware repositories",
+  "version": "0.0.0-development",
+  "private": true,
+  "license": "MIT",
+  "author": {
+    "name": "Kai Schwarz",
+    "email": "kai.schwarz@centralnic.com"
+  },
+  "maintainers": [
+    {
+      "name": "Kai Schwarz",
+      "email": "kai.schwarz@centralnic.com"
+    },
+    {
+      "name": "Asif Nawaz",
+      "email": "asif.nawaz@centralnic.com"
+    }
+  ],
+  "homepage": "https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features",
+  "repository": "github:centralnicgroup-opensource/rtldev-middleware-devcontainer-features.git",
+  "bugs": "https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/issues",
+  "keywords": [
+    "devcontainer",
+    "devcontainer-features",
+    "zsh",
+    "commitizen",
+    "pnpm",
+    "rtldev",
+    "middleware"
+  ],
+  "engines": {
+    "node": ">=24.15.0",
+    "npm": ">=12.0.0"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "features:test": "devcontainer features test --features devbase --base-image mcr.microsoft.com/devcontainers/base:2-ubuntu-24.04 ./features",
+    "devbase:local": "rm -rf .devcontainer/local/devbase && cp -r features/src/devbase .devcontainer/local/devbase && echo 'Copied features/src/devbase -> .devcontainer/local/devbase. Rebuild the \"working tree\" devcontainer config to pick it up.'",
+    "devbase:local:clean": "rm -rf .devcontainer/local/devbase",
+    "features:lint": "pnpm run shellcheck && pnpm run features:validate",
+    "features:validate": "bash scripts/validate-features.sh",
+    "shellcheck": "shellcheck --severity=warning features/src/*/install.sh features/src/*/bin/*.sh features/src/*/lib/*.sh features/test/*/*.sh scripts/*.sh .claude/hooks/*.sh .husky/pre-commit",
+    "lint": "pnpm run prettier && pnpm run features:lint && pnpm run lint:workflows",
+    "lint:workflows": "bash scripts/lint-workflows.sh",
+    "prettier": "prettier --check .",
+    "prettier:fix": "prettier --write ."
+  },
+  "devDependencies": {
+    "@devcontainers/cli": "^0.80.0",
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/git": "^11.0.1",
+    "@team-internet/semantic-release-plugins": "^2.2.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.9.6",
+    "semantic-release": "^25.0.9"
+  },
+  "lint-staged": {
+    "**/*": [
+      "prettier --write --ignore-unknown"
+    ],
+    "**/*.sh": [
+      "shellcheck --severity=warning"
+    ]
+  }
+}

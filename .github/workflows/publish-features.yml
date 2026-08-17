@@ -1,0 +1,49 @@
+name: Publish features (manual)
+# Manual only. The normal path is release.yml, which bumps the version with
+# semantic-release and publishes in the same run.
+#
+# This exists for the two cases that path cannot serve:
+#   * the very first publish, before any release has been tagged
+#   * re-publishing after a registry-side problem, without inventing a commit
+#
+# Publishing is idempotent — a version already in the registry is skipped, not
+# overwritten — so running this cannot damage anything already published. To ship a
+# *changed* Feature the version in devcontainer-feature.json must differ from what is
+# already published; normally semantic-release takes care of that.
+"on":
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ref to publish from"
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # generate-docs commits the per-feature README.md
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Show what will be published
+        run: |
+          for f in features/src/*/devcontainer-feature.json; do
+            printf '%s -> %s\n' "$(jq -r .id "${f}")" "$(jq -r .version "${f}")"
+          done
+
+      - name: Publish
+        uses: devcontainers/action@v1
+        with:
+          publish-features: "true"
+          base-path-to-features: features/src
+          generate-docs: "true"
+          disable-repo-tagging: "true"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

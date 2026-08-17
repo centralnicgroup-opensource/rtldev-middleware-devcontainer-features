@@ -1,0 +1,13 @@
+# Line endings: normalise in the repository, check out LF everywhere. Without this, a
+# Windows clone rewrites the Feature's shell scripts to CRLF — and a CRLF install.sh
+# fails inside the container with an unhelpful "bad interpreter" error.
+* text=auto eol=lf
+
+# Belt and braces for the files where a CRLF is fatal rather than merely untidy.
+*.sh text eol=lf
+.zshrc text eol=lf
+.czrc text eol=lf
+*.conf text eol=lf
+
+# No export-ignore section: this repository is published as OCI Feature artifacts by
+# the devcontainers action, not as a source archive, so `git archive` plays no part.

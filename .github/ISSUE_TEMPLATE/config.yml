@@ -1,0 +1,13 @@
+# Set blank_issues_enabled to false only once the templates above cover the real
+# cases — otherwise a reporter with a genuine issue that fits neither has nowhere
+# to go and simply does not report it.
+blank_issues_enabled: true
+
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/security/advisories/new
+    about: Report privately through GitHub Private Vulnerability Reporting — never as a public issue.
+
+  - name: Support question
+    url: https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/discussions
+    about: Usage questions and help requests. Delete this entry if Discussions is not enabled.
