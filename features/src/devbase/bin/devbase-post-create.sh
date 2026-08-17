@@ -29,7 +29,7 @@ main() {
     echo "=== ${SCRIPT_NAME} ==="
     echo "User:        $(whoami)"
     echo "Workspace:   $(pwd)"
-    echo "Environment: ${GITHUB_CLI:-${CI:-development}}"
+    echo "Environment: ${GITHUB_ACTIONS:-${CI:-development}}"
 
     # Return to the starting directory whatever happens, so a step that cd's
     # cannot leave a later one somewhere unexpected. Early expansion intended.

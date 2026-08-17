@@ -22,8 +22,13 @@
 #
 # Host-coupled steps (shell-history symlink, .env seeding) are pointless in CI
 # and their absence there is not a failure worth logging as one.
+#
+# GITHUB_ACTIONS is the variable GitHub Actions actually sets. This read
+# GITHUB_CLI, which nothing sets — a name inherited from the scripts this file
+# replaced. It was harmless only because CI is set alongside it, so the second
+# test carried the whole check while the first looked deliberate.
 _devbase_in_ci() {
-    [ "${GITHUB_CLI:-false}" = "true" ] || [ "${CI:-false}" = "true" ]
+    [ "${GITHUB_ACTIONS:-false}" = "true" ] || [ "${CI:-false}" = "true" ]
 }
 
 # ---------------------------------------------------------------------------

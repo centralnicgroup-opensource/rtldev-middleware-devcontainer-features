@@ -11,7 +11,9 @@ export ZSH_CACHE_DIR="$HOME/.cache/oh-my-zsh"
 [[ -d "$ZSH_CACHE_DIR" ]] || mkdir -p "$ZSH_CACHE_DIR"
 
 ###### Interactive setup — skipped in CI ######
-if [[ "${GITHUB_CLI:-false}" != "true" && "${CI:-false}" != "true" ]]; then
+# GITHUB_ACTIONS is what GitHub Actions sets; the GITHUB_CLI this used to test is
+# set by nothing and was inherited from the .zshrc copies this file replaced.
+if [[ "${GITHUB_ACTIONS:-false}" != "true" && "${CI:-false}" != "true" ]]; then
   export ZSH=$HOME/.oh-my-zsh
 
   # Guarded: a base image without Oh My Zsh still gets a working shell, just
