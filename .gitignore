@@ -1,0 +1,56 @@
+# Dependencies
+node_modules
+vendor
+.pnpm-store
+
+# Build output
+build
+dist
+coverage
+reports
+
+# Environment / secrets
+# env.sh holds credentials for local testing and must never be committed.
+env.sh
+.env
+.env.local
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+*.swp
+
+# Claude Code — local user settings (personal overrides, MCP permissions).
+# .claude/settings.json IS committed; only the .local variant is personal.
+.claude/settings.local.json
+
+# --- language-specific: delete the blocks that do not apply -------------------
+
+# PHP
+.phpunit.result.cache
+.phpunit.cache
+.php-cs-fixer.cache
+
+# Node / TypeScript
+*.tsbuildinfo
+.eslintcache
+
+# Python
+__pycache__/
+*.py[cod]
+.venv
+.pytest_cache
+.mypy_cache
+
+# Go
+*.test
+*.out
+
+# Java
+target/
+*.class
+
+# Working-tree copy of the Feature, made by `pnpm devbase:local` so the alternate
+# devcontainer config can consume it. Never committed: the source of truth is
+# features/src/, and a second committed copy is exactly the drift this repo prevents.
+.devcontainer/local/devbase/

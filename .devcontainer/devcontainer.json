@@ -1,0 +1,98 @@
+{
+  // THE DEFAULT CONFIG — use this one for day-to-day work on this repository. VS Code
+  // offers a picker because .devcontainer/local/devcontainer.json also exists; that
+  // alternate is a lean, working-tree-only variant for the rarer case of living in an
+  // unreleased Feature change, and is not meant as a daily environment.
+  //
+  // `devbase` is consumed from ghcr.io here, exactly as a consumer consumes it, so this
+  // container is a standing check that the *published* artifact works. See the comment
+  // on the features block below for why it cannot point at the working tree, and use
+  // `pnpm features:test` — which builds real containers straight from features/src/ —
+  // as the iteration loop for Feature changes. It needs no rebuild of this container.
+  "name": "dstack-devcontainer-features",
+  "build": {
+    "context": ".",
+    "dockerfile": "Dockerfile"
+  },
+
+  "workspaceMount": "source=${localWorkspaceFolder},target=/usr/share/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+  "workspaceFolder": "/usr/share/${localWorkspaceFolderBasename}",
+  "shutdownAction": "stopContainer",
+
+  "initializeCommand": "mkdir -p ${localEnv:HOME}/.claude",
+
+  "features": {
+    // Node supplies the devcontainer CLI (`pnpm features:test`) and prettier.
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "lts"
+    },
+    // `devcontainer features test` builds real containers, so this environment needs
+    // a working Docker daemon of its own. Without it the test suite cannot run here
+    // and you are back to pushing a branch to find out whether a change works.
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
+
+    // This repository's own dev environment uses the Feature it ships — the same way a
+    // consumer does, from the registry. So this container is a standing check that the
+    // *published* artifact actually works.
+    //
+    // It is deliberately NOT the working tree, because the devcontainer CLI cannot
+    // reference it. All three ways were tried and measured:
+    //
+    //   "../features/src/devbase"  -> refused outright:
+    //        "Local file path parse error. Resolved path must be a child of the
+    //         .devcontainer/ folder."
+    //   a symlink at ./devbase     -> passes that path check, then dies in the fetch
+    //        step with "Failed to fetch feature" — the CLI needs a real directory.
+    //   a real copy at ./devbase   -> works, but is a second copy of the source in the
+    //        one repository that exists to stop copies drifting.
+    //
+    // Copying it in from initializeCommand does not rescue it either: features are
+    // resolved before initializeCommand runs.
+    //
+    // The working tree is tested by `pnpm features:test`, which builds real containers
+    // from features/src/ — that is the iteration loop. `pnpm devbase:local` exists for
+    // the rarer case of wanting the working-tree Feature in *this* container; see the
+    // README's "Developing a Feature".
+    //
+    // Chicken-and-egg on a brand-new repository: until the first publish there is no
+    // devbase:1 to pull, so run the "Publish features (manual)" workflow once — or use
+    // `pnpm devbase:local` — before building this container.
+    "ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:1": {}
+  },
+
+  "customizations": {
+    "vscode": {
+      // devbase already contributes the shared set and the zsh terminal profile.
+      // These are the ones specific to working on shell and container definitions.
+      "extensions": [
+        "timonwong.shellcheck",
+        "foxundermoon.shell-format",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "shellcheck.enable": true,
+        "shellcheck.customArgs": ["--severity=warning"],
+        "files.associations": {
+          "devcontainer-feature.json": "jsonc",
+          "*.conf": "shellscript"
+        },
+        "npm.packageManager": "pnpm"
+      }
+    }
+  },
+
+  "remoteUser": "vscode",
+
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,readonly",
+    "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,consistency=cached",
+    // /WSL_USER is where devbase looks for .zsh_history to persist shell history.
+    "source=${localEnv:HOME}${localEnv:USERPROFILE},target=/WSL_USER,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
+  ]
+
+  // No postCreateCommand: devbase installs this repository's package.json
+  // dependencies itself. Its hooks run before any added here would.
+}

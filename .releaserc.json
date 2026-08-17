@@ -1,0 +1,47 @@
+{
+  "ci": false,
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    [
+      "@semantic-release/changelog",
+      {
+        "changelogFile": "HISTORY.md"
+      }
+    ],
+    [
+      "@team-internet/semantic-release-plugins/replace",
+      {
+        "replacements": [
+          {
+            "files": ["features/src/devbase/devcontainer-feature.json"],
+            "from": "\"version\": \"\\d+\\.\\d+\\.\\d+\"",
+            "to": "\"version\": \"${nextRelease.version}\"",
+            "countMatches": true,
+            "results": [
+              {
+                "file": "features/src/devbase/devcontainer-feature.json",
+                "hasChanged": true,
+                "numMatches": 1,
+                "numReplacements": 1
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": [
+          "HISTORY.md",
+          "package.json",
+          "pnpm-lock.yaml",
+          "features/src/devbase/devcontainer-feature.json"
+        ]
+      }
+    ],
+    "@team-internet/semantic-release-plugins/teams-notify",
+    "@semantic-release/github"
+  ]
+}
