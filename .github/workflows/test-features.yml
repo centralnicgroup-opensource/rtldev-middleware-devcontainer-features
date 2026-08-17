@@ -36,17 +36,30 @@ jobs:
         with:
           node-version: lts/*
 
-      - name: Install the devcontainer CLI
-        run: npm install -g @devcontainers/cli
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      # The devcontainer CLI comes from the lockfile rather than a global
+      # `npm install -g @devcontainers/cli`. That global install takes the `latest`
+      # dist-tag and ignores package.json entirely, so CI ran a different CLI than
+      # the working tree resolves — and on a 0.x tool every minor is a permitted
+      # breaking change, which means an upstream publish could turn this job red
+      # with no commit here.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       # Runs features/test/<feature>/test.sh against the default options, then every
       # scenario in scenarios.json with its matching <scenario>.sh. Each one builds a
       # real container, which is the only honest way to test a Feature: install.sh runs
       # as root at build time and the lifecycle hooks run as the remote user afterwards,
       # and nothing short of a real build reproduces that split.
+      #
+      # `pnpm exec` rather than the `features:test` script: the script hardcodes
+      # devbase, while this job is a matrix over every Feature. Same CLI, same
+      # arguments — the matrix entry is the only difference.
       - name: Run feature tests
         run: |
-          devcontainer features test \
+          pnpm exec devcontainer features test \
             --features "${{ matrix.feature }}" \
             --base-image mcr.microsoft.com/devcontainers/base:2-ubuntu-24.04 \
             ./features
