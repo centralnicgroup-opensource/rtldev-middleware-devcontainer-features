@@ -1,0 +1,31 @@
+{
+  "minimal": {
+    "image": "mcr.microsoft.com/devcontainers/base:2-ubuntu-24.04",
+    "features": {
+      "devbase": {
+        "commonPackages": false,
+        "timezone": "",
+        "installPnpm": false,
+        "globalPackages": "",
+        "zshAutosuggestions": false,
+        "historyPersistence": false,
+        "ghCredentialHelper": false,
+        "envInfoBanner": false,
+        "installProjectDependencies": false,
+        "autoloadEnvScript": false,
+        "installRtk": false
+      }
+    }
+  },
+  "node_project": {
+    "image": "mcr.microsoft.com/devcontainers/base:2-ubuntu-24.04",
+    "features": {
+      "ghcr.io/devcontainers/features/node:2": {
+        "version": "lts"
+      },
+      "devbase": {
+        "timezone": "Europe/London"
+      }
+    }
+  }
+}

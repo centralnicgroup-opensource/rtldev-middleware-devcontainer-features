@@ -1,0 +1,102 @@
+{
+  "id": "devbase",
+  "version": "1.0.0",
+  "name": "RTLDEV Middleware dev base",
+  "description": "Shared devcontainer behaviour for RTLDEV middleware repositories: zsh with the team prompt, commitizen, pnpm, the gh credential helper, persistent shell history and an on-attach toolchain banner. Language toolchains stay in the consuming repository's own feature list — this Feature deliberately installs no runtime.",
+  "documentationURL": "https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features#the-devbase-feature",
+  "licenseURL": "https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/blob/main/LICENSE",
+  "keywords": ["zsh", "commitizen", "pnpm", "rtldev", "middleware"],
+  "options": {
+    "commonPackages": {
+      "type": "boolean",
+      "default": true,
+      "description": "Install the small package set every repository ends up needing anyway (wget, jq, git, zip, unzip, curl, shellcheck). Set false when the base image already provides them or the image must stay minimal."
+    },
+    "timezone": {
+      "type": "string",
+      "default": "Europe/Berlin",
+      "description": "Container timezone, written to /etc/localtime and /etc/timezone. Set to an empty string to leave the image's timezone untouched."
+    },
+    "installPnpm": {
+      "type": "boolean",
+      "default": true,
+      "description": "Install pnpm globally on first create. Requires a Node toolchain in the container — list the Node feature too, or the step reports it as missing and moves on."
+    },
+    "globalPackages": {
+      "type": "string",
+      "default": "commitizen@latest,cz-conventional-changelog@latest",
+      "description": "Comma-separated packages to install globally with pnpm on first create. Empty string installs nothing."
+    },
+    "zshAutosuggestions": {
+      "type": "boolean",
+      "default": true,
+      "description": "Install the zsh-autosuggestions plugin. Suggestions are driven by $HISTFILE, so they survive container rebuilds when historyPersistence is on."
+    },
+    "historyPersistence": {
+      "type": "boolean",
+      "default": true,
+      "description": "Symlink ~/.zsh_history to /WSL_USER/.zsh_history so shell history survives rebuilds. Needs the host home bind-mounted at /WSL_USER by the frame; skipped silently when that mount is absent, and always skipped in CI."
+    },
+    "ghCredentialHelper": {
+      "type": "boolean",
+      "default": true,
+      "description": "Point the workspace's git credential helper at `gh auth git-credential`, replacing the system-level VS Code helper."
+    },
+    "envInfoBanner": {
+      "type": "boolean",
+      "default": true,
+      "description": "Print the toolchain banner on every attach, configured by .devcontainer/env-info.conf in the workspace. Also installs `devbase-env-info` for running it by hand."
+    },
+    "installProjectDependencies": {
+      "type": "boolean",
+      "default": true,
+      "description": "On first create, install dependencies for whatever manifests exist in the workspace: composer.json via composer, package.json via pnpm, and seed .env from .env.example. Set false for repositories whose setup is non-standard enough to own the whole step."
+    },
+    "autoloadEnvScript": {
+      "type": "boolean",
+      "default": true,
+      "description": "When the workspace root has an env.sh, source it from ~/.zshenv so every new terminal inherits the workspace variables without a manual `source env.sh`."
+    },
+    "installRtk": {
+      "type": "boolean",
+      "default": true,
+      "description": "Install RTK (github.com/rtk-ai/rtk), the token-optimizing CLI proxy for Claude Code. Only the binary is installed — the PreToolUse hook that invokes it lives in the bind-mounted ~/.claude/settings.json, which this Feature never touches. Without the binary present, that hook exits 127 on every Bash call, which is why this defaults to on."
+    },
+    "rtkVersion": {
+      "type": "string",
+      "default": "0.45.0",
+      "description": "RTK release to install, without the leading 'v'. Pinned rather than tracking latest, and the download is checksum-verified against the release's checksums.txt."
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "github.vscode-github-actions",
+        "github.vscode-pull-request-github",
+        "ms-vscode-remote.remote-containers",
+        "ms-azuretools.vscode-containers",
+        "anthropic.claude-code",
+        "anthropic.claude-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "zsh": {
+            "path": "/bin/zsh"
+          }
+        }
+      }
+    }
+  },
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/common-utils",
+    "ghcr.io/devcontainers/features/node",
+    "ghcr.io/devcontainers/features/php",
+    "ghcr.io/devcontainers/features/go",
+    "ghcr.io/devcontainers/features/python",
+    "ghcr.io/devcontainers/features/java",
+    "ghcr.io/devcontainers/features/github-cli"
+  ],
+  "postCreateCommand": "zsh /usr/local/bin/devbase-post-create.sh",
+  "postAttachCommand": "zsh /usr/local/bin/devbase-post-attach.sh"
+}
