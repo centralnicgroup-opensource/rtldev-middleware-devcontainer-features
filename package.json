@@ -42,7 +42,8 @@
     "features:lint": "pnpm run shellcheck && pnpm run features:validate",
     "features:validate": "bash scripts/validate-features.sh",
     "shellcheck": "shellcheck --severity=warning features/src/*/install.sh features/src/*/bin/*.sh features/src/*/lib/*.sh features/test/*/*.sh scripts/*.sh .claude/hooks/*.sh .husky/pre-commit",
-    "lint": "pnpm run prettier && pnpm run features:lint",
+    "lint": "pnpm run prettier && pnpm run features:lint && pnpm run lint:workflows",
+    "lint:workflows": "bash scripts/lint-workflows.sh",
     "prettier": "prettier --check .",
     "prettier:fix": "prettier --write ."
   },

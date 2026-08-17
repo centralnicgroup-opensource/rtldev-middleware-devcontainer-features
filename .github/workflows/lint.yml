@@ -87,11 +87,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Actionlint
-        uses: reviewdog/action-actionlint@v1
+      - uses: actions/setup-node@v6
         with:
-          reporter: github-pr-check
-          fail_level: error
+          node-version: lts/*
+      - name: Install pnpm
+        run: npm install -g pnpm
+      # The same pinned actionlint the working tree runs, rather than
+      # reviewdog/action-actionlint. Two reasons beyond dropping a third-party action:
+      # the reviewer used `reporter: github-pr-check`, which has nothing to report on a
+      # push to main, and a floating action version can change what passes without a
+      # commit here.
+      #
+      # This job cannot catch a syntax error in *this* file — an unparseable workflow
+      # never starts, so the job that would report it does not run either. That is why
+      # `pnpm lint` runs the same script locally; see scripts/lint-workflows.sh.
+      - name: Actionlint
+        run: pnpm run lint:workflows
 
   hadolint:
     name: Hadolint
@@ -119,11 +130,18 @@ jobs:
       # red ShellCheck or Prettier job was mergeable. It caught nothing short of every
       # job failing at once.
       #
+      # Note the single quotes in the expression. A GitHub expression accepts only
+      # single-quoted string literals, and the double-quoted join(needs.*.result, " ")
+      # this file used to carry made the *entire workflow* unparseable — so none of the
+      # jobs above ever ran, on any commit, and the run showed up named after the file
+      # path rather than "Lint". Both defects hid each other: an unparseable file cannot
+      # report that its gate is broken.
+      #
       # The results go through env rather than being interpolated into the script, so
       # the expression cannot be parsed as shell.
       - name: Check results
         env:
-          RESULTS: ${{ join(needs.*.result, " ") }}
+          RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
           failed=0
           for result in ${RESULTS}; do

@@ -9,6 +9,9 @@ dist
 coverage
 reports
 
+# Pinned dev tooling downloaded on demand by scripts/ (actionlint).
+.cache
+
 # Environment / secrets
 # env.sh holds credentials for local testing and must never be committed.
 env.sh
