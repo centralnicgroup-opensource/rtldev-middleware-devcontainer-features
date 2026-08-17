@@ -53,10 +53,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The env var name and the secret name differ on purpose, and both halves are
+      # load-bearing: the teams-notify plugin reads TEAMS_NOTIFICATION_URI from the
+      # environment, while the webhook itself lives in the org-wide secret
+      # RTLDEV_MW_CI_NOTIFICATION_URI. This used to read secrets.TEAMS_NOTIFICATION_URI —
+      # a secret that does not exist, so it resolved to the empty string.
+      #
+      # That was not a cosmetic miss. The plugin implements semantic-release's
+      # verifyConditions hook and throws NoTeamsWebhook on an empty webhook, so the
+      # release aborted on its first step and the first release could never be cut. It
+      # fails safe — before any tag, commit or publish — which is also why it would have
+      # looked like an unrelated release failure rather than a missing secret.
       - name: Semantic release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TEAMS_NOTIFICATION_URI: ${{ secrets.TEAMS_NOTIFICATION_URI }}
+          TEAMS_NOTIFICATION_URI: ${{ secrets.RTLDEV_MW_CI_NOTIFICATION_URI }}
         run: pnpm exec semantic-release
 
       # The working tree now carries whatever version semantic-release decided on, so the
