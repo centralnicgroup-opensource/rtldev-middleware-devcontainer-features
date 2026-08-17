@@ -35,9 +35,11 @@ check "rtk not installed" bash -c '! test -e /usr/local/bin/rtk'
 check "rtk opt-out recorded" \
     grep -q 'DEVBASE_INSTALL_RTK="false"' /usr/local/share/devbase/config.env
 
-# An empty timezone means "leave the image alone", so nothing was written.
+# An empty timezone means "leave the image alone", so nothing was written. No
+# `|| true` here: with it, this check could never fail, and it duly reported
+# SUCCESS while install.sh was writing Europe/Berlin anyway.
 check "timezone left untouched" bash -c \
-    '! grep -q "Europe/Berlin" /etc/timezone 2>/dev/null || true'
+    '! grep -q "Europe/Berlin" /etc/timezone'
 
 # post-create must be a no-op rather than a failure when everything is off.
 check "post-create succeeds with every step disabled" \

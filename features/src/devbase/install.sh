@@ -20,10 +20,16 @@ SHARE_DIR="/usr/local/share/devbase"
 # Option values arrive as upper-cased environment variables named after the
 # option ids in devcontainer-feature.json. Defaults are repeated here so the
 # script is also runnable standalone (which is how the tests drive it).
+#
+# The two string options below use ${VAR-default}, not ${VAR:-default}: for them
+# an empty value is a meaningful choice ("no global packages", "leave the image
+# timezone alone"), and the colon form substitutes the default for empty as well
+# as unset, which would silently ignore the opt-out. The booleans keep the colon
+# form — an empty boolean has no meaning, so falling back to the default is right.
 COMMON_PACKAGES="${COMMONPACKAGES:-true}"
-TIMEZONE="${TIMEZONE:-Europe/Berlin}"
+TIMEZONE="${TIMEZONE-Europe/Berlin}"
 INSTALL_PNPM="${INSTALLPNPM:-true}"
-GLOBAL_PACKAGES="${GLOBALPACKAGES:-commitizen@latest,cz-conventional-changelog@latest}"
+GLOBAL_PACKAGES="${GLOBALPACKAGES-commitizen@latest,cz-conventional-changelog@latest}"
 ZSH_AUTOSUGGESTIONS="${ZSHAUTOSUGGESTIONS:-true}"
 HISTORY_PERSISTENCE="${HISTORYPERSISTENCE:-true}"
 GH_CREDENTIAL_HELPER="${GHCREDENTIALHELPER:-true}"
