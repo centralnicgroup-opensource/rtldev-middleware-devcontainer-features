@@ -21,7 +21,7 @@ that breaks the Feature breaks your own shell on the next rebuild. That is delib
 Before opening a pull request:
 
 ```sh
-pnpm lint            # prettier + shellcheck + feature metadata
+pnpm lint            # prettier + shellcheck + feature metadata + actionlint
 pnpm features:test   # real container builds: default options + every scenario
 ```
 

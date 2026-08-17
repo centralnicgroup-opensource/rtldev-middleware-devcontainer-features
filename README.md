@@ -279,8 +279,15 @@ works. The working tree is exercised by the test suite instead:
 pnpm features:test                        # default options + every scenario, real builds
 pnpm features:test -- --filter minimal    # one scenario, while iterating
 pnpm features:lint                        # shellcheck + metadata validation
-pnpm lint                                 # the above plus prettier
+pnpm lint:workflows                       # actionlint over .github/workflows
+pnpm lint                                 # all of the above plus prettier
 ```
+
+`pnpm lint` runs the same checks CI does, from the same scripts, so a green run locally
+means a green run in CI. `lint:workflows` is the one that cannot be left to CI alone: an
+invalid workflow file never starts, so the actionlint job that would report it is one of
+the jobs that does not run. It downloads a pinned, checksum-verified actionlint into
+`.cache/` on first use unless one is already on `PATH`.
 
 `pnpm features:test` builds real containers straight from `features/src/`, so it is the
 iteration loop — no publish, no copy, nothing to keep in sync. It needs a Docker daemon,
@@ -363,7 +370,12 @@ Run the tests:
 pnpm features:test              # default options + every scenario
 pnpm features:test -- --filter minimal   # one scenario, while iterating
 pnpm features:lint              # shellcheck + metadata validation
+pnpm lint                       # the above plus prettier and actionlint
 ```
+
+Assert on **effects**, not on log lines, and check a new assertion against a deliberately
+broken implementation before trusting it. A check that cannot fail is worse than no check:
+it reports SUCCESS and sends the next person looking somewhere else.
 
 ## Publishing
 

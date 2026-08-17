@@ -25,9 +25,16 @@ updates:
           - "*"
 
   # Tracks the features listed in .devcontainer/devcontainer.json — Node,
-  # docker-in-docker, github-cli, claude-code. It cannot track `devbase` itself, which
-  # is referenced by working-tree path on purpose so development happens against the
-  # code in the branch rather than the last published version.
+  # docker-in-docker, github-cli, claude-code, and `devbase` itself, which that config
+  # consumes from the registry like any other consumer.
+  #
+  # All of them are pinned to a major tag (`node:2`, `devbase:1`), so there is nothing
+  # here for Dependabot to move until a new *major* appears: within `1.x` the tag itself
+  # resolves to the newest release on every rebuild. That is deliberate for `devbase` —
+  # this environment is a standing check that the published artifact works, and pinning it
+  # to a digest would freeze that check on a stale version. A digest pin is what a
+  # consuming repository wants, and consuming repositories have a devcontainer-lock.json
+  # for it; this one does not, on purpose.
   - package-ecosystem: "devcontainers"
     directory: "/"
     schedule:

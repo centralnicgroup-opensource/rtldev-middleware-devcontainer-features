@@ -41,7 +41,10 @@ environment.
 - **Option values do not survive into the lifecycle scripts.** They arrive at
   `install.sh` as upper-cased environment variables and are recorded in
   `/usr/local/share/devbase/config.env`, which the lifecycle scripts source. A new option
-  needs a line there or it silently has no effect at create time.
+  needs a line there or it silently has no effect at create time. `install.sh` also repeats
+  the manifest default so it stays runnable standalone; only the manifest one affects a
+  real build, so `pnpm features:validate` fails when the two disagree. Values written to
+  `config.env` are escaped — it is sourced, so an option value is shell input.
 - **A Feature cannot set** `name`, `workspaceMount`/`workspaceFolder`, `remoteUser`,
   `forwardPorts`, `shutdownAction` or `initializeCommand`. Those belong to the consuming
   repository's frame — do not try to move them here.
@@ -81,15 +84,26 @@ environment.
   container build — there is no unit-test shortcut, because the root/user and
   build/create splits only exist in a real build.
 - **A new option needs a scenario**, or nothing proves the opt-out actually opts out.
-- Assert on **effects**, not on log lines: that the file exists, that the config value was
-  recorded, that the binary answers.
+- Assert on **effects**, not on log lines: that the symlink exists, that the helper is in
+  the git config, that the dependency is installed — not that a message was printed.
+  Recording an option value in `config.env` is not coverage of the step it configures.
+- **Check a new assertion against a broken implementation before trusting it.** Break the
+  thing it guards, confirm the suite goes red and that the failing check is the one that
+  names the behaviour, then restore. A check that cannot fail is worse than no check: it
+  reports SUCCESS and sends the next person looking somewhere else. Both defects this
+  suite has actually shipped were of that shape.
 
 ```sh
 pnpm features:test                        # default options + every scenario
 pnpm features:test -- --filter minimal    # one scenario, while iterating
 pnpm features:lint                        # shellcheck + metadata validation
-pnpm lint                                 # the above plus prettier
+pnpm lint:workflows                       # actionlint over .github/workflows
+pnpm lint                                 # all of the above plus prettier
 ```
+
+`pnpm lint` and CI run the same scripts, so local green means CI green. Do not put a check
+inline in a workflow — it drifts from the pnpm script within a commit or two, which is how
+the directory/id check ended up in CI only and `.husky/pre-commit` in the script only.
 
 Running the tests needs a Docker daemon; this repository's devcontainer includes
 docker-in-docker for exactly that.
@@ -109,6 +123,10 @@ artifact works.
   refreshed after every edit.
 - `.devcontainer/env-info.conf` is also the reference example of that file: a change to the
   config format breaks here first.
+- **This config deliberately has no `devcontainer-lock.json`.** Every feature here is
+  pinned to a major tag, so each rebuild resolves the newest `1.x` — which is the point of
+  a dogfooding check. A digest pin would freeze it on a stale artifact. A _consuming_
+  repository wants the opposite and has a lock file for it.
 
 ## Build, CI & Policies
 
@@ -127,6 +145,15 @@ artifact works.
 - **CI is defined here, not delegated** to rtldev-middleware-shareable-workflows: the
   shared lint workflows are language-oriented and this repository ships shell and
   container metadata.
+- **An invalid workflow file fails silently-ish, so lint workflows locally.** GitHub cannot
+  start a workflow it cannot parse, so the `actionlint` job inside `lint.yml` can never
+  report a syntax error in `lint.yml`. The run is named after the file path instead of the
+  workflow, attaches no check to the PR, and reads like noise — `Lint` was dead for five
+  commits that way. `pnpm lint` catches it before the push. A GitHub expression takes
+  **single-quoted** strings only: `join(needs.*.result, ' ')`.
+- **A gate over `needs.*.result` must test each result.** `grep -vw success` over the
+  joined line passes whenever _any_ job succeeded, which is the opposite of what a gate
+  is for.
 - **Consumers pin `:1`** and Dependabot's `devcontainers` ecosystem moves the digest, so a
   breaking change inside `1.x` reaches every repository automatically. Treat the major as
   a real contract.
@@ -159,6 +186,8 @@ artifact works.
 | `features/src/devbase/lib/env-info.sh`           | The attach banner; also installed as `devbase-env-info`                                |
 | `/usr/local/share/devbase/config.env`            | Where option values live at create time (written by `install.sh`)                      |
 | `.devcontainer/env-info.conf`                    | This repo's banner config, and the reference example of the format                     |
+| `scripts/validate-features.sh`                   | Metadata checks, incl. manifest defaults vs. `install.sh` fallbacks                    |
+| `scripts/lint-workflows.sh`                      | actionlint, run locally because CI cannot lint a workflow that will not start          |
 
 ## Atlassian / JIRA
 
@@ -205,7 +234,10 @@ Opus decides, Sonnet implements. Definitions live in `.claude/agents/`.
   features, and this Feature deliberately installs none
 - Hand-edit `version` in `devcontainer-feature.json` — semantic-release owns it
 - File a behaviour change under a non-releasing commit type, which silently ships nothing
-- Repoint this repository's devcontainer at the published coordinate
+- Repoint this repository's devcontainer **away from** the published coordinate — the
+  registry reference in `.devcontainer/devcontainer.json` is the dogfooding check, and
+  `pnpm devbase:local` plus the alternate config is the supported way to run the working
+  tree instead
 - Make a step fatal when the prerequisite is merely absent
 - Log SUCCESS without verifying the effect
 - Add `Co-Authored-By:` trailers to commit messages
