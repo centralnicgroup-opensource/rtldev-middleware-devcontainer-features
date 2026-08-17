@@ -40,8 +40,8 @@
     "devbase:local": "rm -rf .devcontainer/local/devbase && cp -r features/src/devbase .devcontainer/local/devbase && echo 'Copied features/src/devbase -> .devcontainer/local/devbase. Rebuild the \"working tree\" devcontainer config to pick it up.'",
     "devbase:local:clean": "rm -rf .devcontainer/local/devbase",
     "features:lint": "pnpm run shellcheck && pnpm run features:validate",
-    "features:validate": "for f in features/src/*/devcontainer-feature.json; do jq -e '.id and .version and .name and .description' \"$f\" > /dev/null || exit 1; done",
-    "shellcheck": "shellcheck --severity=warning features/src/*/install.sh features/src/*/bin/*.sh features/src/*/lib/*.sh features/test/*/*.sh .claude/hooks/*.sh",
+    "features:validate": "bash scripts/validate-features.sh",
+    "shellcheck": "shellcheck --severity=warning features/src/*/install.sh features/src/*/bin/*.sh features/src/*/lib/*.sh features/test/*/*.sh scripts/*.sh .claude/hooks/*.sh .husky/pre-commit",
     "lint": "pnpm run prettier && pnpm run features:lint",
     "prettier": "prettier --check .",
     "prettier:fix": "prettier --write ."
