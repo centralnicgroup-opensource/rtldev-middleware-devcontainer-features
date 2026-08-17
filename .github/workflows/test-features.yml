@@ -41,7 +41,7 @@ jobs:
           devcontainer features test \
             --features "${{ matrix.feature }}" \
             --base-image mcr.microsoft.com/devcontainers/base:2-ubuntu-24.04 \
-            .
+            ./features
 
   ci-success:
     name: "Feature tests: completed"
