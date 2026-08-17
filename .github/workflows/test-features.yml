@@ -1,0 +1,56 @@
+name: Test features
+"on":
+  pull_request:
+    paths:
+      - "features/**"
+      - ".github/workflows/test-features.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "features/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: "Feature: ${{ matrix.feature }}"
+    runs-on: ubuntu-latest
+    strategy:
+      # fail-fast: false — when a change breaks more than one Feature, seeing all of
+      # them in one run beats fixing them one push at a time.
+      fail-fast: false
+      matrix:
+        feature:
+          - devbase
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install the devcontainer CLI
+        run: npm install -g @devcontainers/cli
+
+      # Runs features/test/<feature>/test.sh against the default options, then every
+      # scenario in scenarios.json with its matching <scenario>.sh. Each one builds a
+      # real container, which is the only honest way to test a Feature: install.sh runs
+      # as root at build time and the lifecycle hooks run as the remote user afterwards,
+      # and nothing short of a real build reproduces that split.
+      - name: Run feature tests
+        run: |
+          devcontainer features test \
+            --features "${{ matrix.feature }}" \
+            --base-image mcr.microsoft.com/devcontainers/base:2-ubuntu-24.04 \
+            .
+
+  ci-success:
+    name: "Feature tests: completed"
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check result
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            exit 1
+          fi

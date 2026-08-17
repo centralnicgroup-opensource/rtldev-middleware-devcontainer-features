@@ -1,0 +1,113 @@
+name: Lint
+"on":
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# These jobs are defined here rather than delegated to
+# rtldev-middleware-shareable-workflows because the shared lint workflows are
+# language-oriented (php-sdk-lint, node-sdk-lint) and this repository is neither: it
+# ships shell scripts and container metadata. Delegating would mean running a PHP or
+# Node analyser over a repository that has no PHP or application code.
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # A defect in this shell code breaks every consuming repository's container, so
+      # warnings are errors here rather than advisory.
+      - name: ShellCheck
+        run: |
+          shellcheck --severity=warning \
+            features/src/*/install.sh \
+            features/src/*/bin/*.sh \
+            features/src/*/lib/*.sh \
+            features/test/*/*.sh \
+            .claude/hooks/*.sh \
+            .husky/pre-commit
+
+  feature-metadata:
+    name: Feature metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Malformed metadata fails at publish time with a far worse error than this, and
+      # only after a merge to main.
+      - name: Validate devcontainer-feature.json
+        run: |
+          status=0
+          for f in features/src/*/devcontainer-feature.json; do
+            echo "Checking ${f}"
+            jq -e '.id and .version and .name and .description' "${f}" >/dev/null || {
+              echo "::error file=${f}::missing one of id/version/name/description"
+              status=1
+            }
+            # The directory name is the Feature id in the published coordinate, so a
+            # mismatch silently publishes under a name nobody references.
+            dir="$(basename "$(dirname "${f}")")"
+            id="$(jq -r '.id' "${f}")"
+            if [ "${dir}" != "${id}" ]; then
+              echo "::error file=${f}::id '${id}' does not match directory '${dir}'"
+              status=1
+            fi
+          done
+          exit "${status}"
+
+  prettier:
+    name: Prettier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      # Gated rather than advisory: unformatted Markdown should be a red build, since
+      # this repository's README is the documentation consumers actually read.
+      - name: Check formatting
+        run: npx --yes prettier@3 --check .
+
+  actionlint:
+    name: Actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Actionlint
+        uses: reviewdog/action-actionlint@v1
+        with:
+          reporter: github-pr-check
+          fail_level: error
+
+  hadolint:
+    name: Hadolint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: .devcontainer/Dockerfile
+
+  # One check for branch protection to require, so adding a job above does not silently
+  # stop being required.
+  ci-success:
+    name: "Lint: completed"
+    needs: [shellcheck, feature-metadata, prettier, actionlint, hadolint]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if echo '${{ join(needs.*.result, " ") }}' | grep -qvw success; then
+            echo "One or more lint jobs failed: ${{ join(needs.*.result, ' ') }}"
+            exit 1
+          fi

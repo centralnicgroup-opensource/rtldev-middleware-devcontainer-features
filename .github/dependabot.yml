@@ -1,0 +1,84 @@
+version: 2
+
+# Live configuration for this repository, pruned to the ecosystems it actually has —
+# an entry whose `directory:` does not exist raises a per-entry error on every
+# Dependabot run rather than being ignored.
+#
+# Weekly for everything that reaches a consumer, monthly for npm: `schedule` controls
+# *version* updates only. Security updates and alerts are raised independently of this
+# file, so a slower interval costs no CVE responsiveness while collapsing routine bumps
+# into one predictable batch. Nothing here is a reason an alert would not arrive.
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Tracks the features listed in .devcontainer/devcontainer.json — Node,
+  # docker-in-docker, github-cli, claude-code. It cannot track `devbase` itself, which
+  # is referenced by working-tree path on purpose so development happens against the
+  # code in the branch rather than the last published version.
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      devcontainers:
+        patterns:
+          - "*"
+
+  # Deliberately the narrowest entry here. Nothing in features/src/ consumes a Node
+  # dependency — the published artifact is shell and JSON — so a stale package cannot
+  # reach a consuming repository the way a devcontainers or docker bump can. It earns
+  # its place only because release.yml installs with --frozen-lockfile, which pins
+  # semantic-release and its plugins to whatever pnpm-lock.yaml records; those decide
+  # the version that gets published, and without this entry nothing would ever move
+  # them. Hence monthly rather than weekly, collapsed into a single PR, and development
+  # dependencies only — `allow` is the scoping that matters, since a production
+  # dependency appearing here would be a change worth noticing by hand.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-type: "development"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "*"
+
+  # The base image in .devcontainer/Dockerfile. Also worth watching because the
+  # Feature's own test suite pins a base image, and the two should not drift apart.
+  - package-ecosystem: "docker"
+    directory: "/.devcontainer"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      docker:
+        patterns:
+          - "*"
