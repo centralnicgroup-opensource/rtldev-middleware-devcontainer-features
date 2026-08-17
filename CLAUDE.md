@@ -37,7 +37,14 @@ environment.
     mysteriously does nothing.
 - **`version` in `devcontainer-feature.json` is owned by semantic-release**, not by you.
   The release workflow derives it from commit types, writes it into the file and
-  publishes in the same run. Never hand-edit it.
+  publishes in the same run. Never hand-edit it. Two properties of the replace plugin make
+  that rule load-bearing rather than stylistic: it asserts `hasChanged: true`, so a
+  manifest already carrying the version being released fails the release in `prepare`
+  (which is how `1.0.0` blocked its own first release), and its `from` regex requires a
+  closing quote straight after the patch number, so a prerelease suffix like
+  `0.0.0-development` matches nothing and fails the same way. The pre-first-release seed is
+  therefore bare **`0.0.0`** — below any real version, and it only ever appears before the
+  first release, because every release commits the real one back.
 - **Option values do not survive into the lifecycle scripts.** They arrive at
   `install.sh` as upper-cased environment variables and are recorded in
   `/usr/local/share/devbase/config.env`, which the lifecycle scripts source. A new option

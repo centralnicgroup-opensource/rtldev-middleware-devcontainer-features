@@ -10,6 +10,12 @@ name: Publish features (manual)
 # overwritten — so running this cannot damage anything already published. To ship a
 # *changed* Feature the version in devcontainer-feature.json must differ from what is
 # already published; normally semantic-release takes care of that.
+#
+# It publishes whatever version the manifest currently carries, which matters before the
+# first release: the manifest is seeded `0.0.0` for the replace plugin, so running this on
+# an unreleased `main` publishes `devbase:0.0.0` and points the major tag at `0`, not `1`.
+# Use release.yml for the first release. The "Show what will be published" step below
+# prints the version precisely so this is visible before the push happens.
 "on":
   workflow_dispatch:
     inputs:
