@@ -59,6 +59,22 @@ jobs:
       - name: Validate devcontainer-feature.json
         run: pnpm run features:validate
 
+  json-keys:
+    name: JSON keys
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - name: Install pnpm
+        run: npm install -g pnpm
+      # A duplicate key is legal JSON — last one wins, silently — so prettier, jq and the
+      # devcontainer CLI all accept it. Nothing else here would catch one, and a second
+      # "initializeCommand" already discarded a build-time guard once.
+      - name: Check for duplicate JSON keys
+        run: pnpm run check:json
+
   prettier:
     name: Prettier
     runs-on: ubuntu-latest
@@ -118,7 +134,8 @@ jobs:
   # stop being required.
   ci-success:
     name: "Lint: completed"
-    needs: [shellcheck, feature-metadata, prettier, actionlint, hadolint]
+    needs:
+      [shellcheck, feature-metadata, json-keys, prettier, actionlint, hadolint]
     if: always()
     runs-on: ubuntu-latest
     steps:
