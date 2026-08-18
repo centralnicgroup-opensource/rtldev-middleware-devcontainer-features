@@ -38,6 +38,7 @@
     "prepare": "husky",
     "features:test": "devcontainer features test --features devbase --base-image mcr.microsoft.com/devcontainers/base:2-ubuntu-24.04 ./features",
     "devbase:local": "rm -rf .devcontainer/local/devbase && cp -r features/src/devbase .devcontainer/local/devbase && echo 'Copied features/src/devbase -> .devcontainer/local/devbase. Rebuild the \"working tree\" devcontainer config to pick it up.'",
+    "devbase:local:check": "bash scripts/check-devbase-local.sh",
     "devbase:local:clean": "rm -rf .devcontainer/local/devbase",
     "features:lint": "pnpm run shellcheck && pnpm run features:validate",
     "features:validate": "bash scripts/validate-features.sh",

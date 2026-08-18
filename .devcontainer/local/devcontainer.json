@@ -35,10 +35,17 @@
 
   "remoteUser": "vscode",
 
-  // Guards the file-shaped bind sources below, and creates ~/.ssh/known_hosts so ssh has
-  // something writable to append host keys to — see the default config for why both are
-  // load-bearing rather than tidy.
-  "initializeCommand": "mkdir -p ${localEnv:HOME}/.claude ${localEnv:HOME}/.ssh && touch ${localEnv:HOME}/.gitconfig ${localEnv:HOME}/.ssh/known_hosts",
+  // Two jobs, and it has to stay ONE key: devcontainer.json is JSON, so a second
+  // "initializeCommand" does not merge or error — it silently replaces the first, and both
+  // prettier and the CLI accept it. This file briefly had exactly that, which discarded the
+  // drift check while looking correct.
+  //
+  // check-devbase-local.sh comes first and fails the build when ./devbase has drifted from
+  // features/src/devbase — the one way this config can quietly lie to you. The rest guards
+  // the file-shaped bind sources below and creates ~/.ssh/known_hosts so ssh has something
+  // writable to append host keys to; see the default config for why both are load-bearing
+  // rather than tidy.
+  "initializeCommand": "bash scripts/check-devbase-local.sh && mkdir -p ${localEnv:HOME}/.claude ${localEnv:HOME}/.ssh && touch ${localEnv:HOME}/.gitconfig ${localEnv:HOME}/.ssh/known_hosts",
 
   "mounts": [
     "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,readonly",

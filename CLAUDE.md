@@ -164,13 +164,20 @@ artifact works.
   resolves outside `.devcontainer/`, and fails the fetch on a symlink. The alternate config
   `.devcontainer/local/devcontainer.json` plus `pnpm devbase:local` (a gitignored copy) is
   the supported way to run the working-tree Feature in this container; the copy must be
-  refreshed after every edit.
+  refreshed after every edit. `scripts/check-devbase-local.sh` is that config's
+  `initializeCommand` and fails the build when the copy has drifted — added after a
+  four-day-old copy, combined with a feature list that had stopped naming what `dependsOn`
+  now supplies, produced a container with no node, npm, pnpm, gh or claude. It is not part
+  of `pnpm lint`: the copy is gitignored and absent in CI.
 - `.devcontainer/env-info.conf` is also the reference example of that file: a change to the
   config format breaks here first.
-- **This config deliberately has no `devcontainer-lock.json`.** Every feature here is
-  pinned to a major tag, so each rebuild resolves the newest `1.x` — which is the point of
-  a dogfooding check. A digest pin would freeze it on a stale artifact. A _consuming_
-  repository wants the opposite and has a lock file for it.
+- **Both `devcontainer-lock.json` files are committed**, and that is a reversal — this
+  used to ship without one so each rebuild resolved the newest `1.x`. The lock pins digests
+  instead, which means a rebuild no longer picks up a fresh release on its own: Dependabot's
+  `devcontainers` ecosystem (weekly, `/`) moves the digest by PR, or `devcontainer upgrade`
+  does it by hand. The dogfooding check therefore still happens, but on Dependabot's
+  cadence and through review rather than silently at rebuild — so **do not read a green
+  rebuild as proof the newest release works.** Check which digest the lock names first.
 - **Never make this frame rely on a guarantee that has not been released yet.** Because it
   consumes the registry, the frame is only ever as correct as the _published_ Feature. The
   moment `github-cli` was dropped from the feature list here, on the strength of a

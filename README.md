@@ -330,13 +330,20 @@ config for that — `.devcontainer/local/devcontainer.json`, offered by VS Code'
 picker as "working tree":
 
 ```sh
-pnpm devbase:local     # copy features/src/devbase -> .devcontainer/local/devbase
-                       # then rebuild, choosing the "working tree" config
+pnpm devbase:local        # copy features/src/devbase -> .devcontainer/local/devbase
+                          # then rebuild, choosing the "working tree" config
+pnpm devbase:local:check  # is the copy still current?
 pnpm devbase:local:clean
 ```
 
 Re-run `pnpm devbase:local` after each edit; forgetting is the one hazard of a copy, and
-the reason this is the exception rather than the default.
+the reason this is the exception rather than the default. That config's
+`initializeCommand` now runs the check for you and **fails the build** on a stale copy,
+because the failure is otherwise unrecognisable as one: a copy predating `dependsOn`,
+in a config that has stopped listing what `dependsOn` supplies, yields a container with
+no `node`, `npm`, `pnpm`, `gh` or `claude` — while `zsh` and `rtk` are present, because
+the old copy installs those itself. It reads as a broken registry rather than a missing
+`cp`.
 
 The copy is not laziness — the devcontainer CLI leaves no better option, and all three
 alternatives were measured:
