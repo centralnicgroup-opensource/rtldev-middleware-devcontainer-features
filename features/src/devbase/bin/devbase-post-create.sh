@@ -38,6 +38,10 @@ main() {
     # shellcheck disable=SC2064
     trap "cd '${original_dir}'" EXIT
 
+    # Ungated and first: it diagnoses the runtime every step below is built on, and a
+    # repository that has opted out of the pnpm step still wants to know its Node is dead.
+    devbase_warn_on_fallback_node
+
     if [ "${DEVBASE_INSTALL_PNPM:-true}" = "true" ]; then
         devbase_setup_npm_floor
         devbase_setup_pnpm

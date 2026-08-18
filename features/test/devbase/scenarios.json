@@ -17,6 +17,15 @@
       }
     }
   },
+  "node_pinned": {
+    "image": "mcr.microsoft.com/devcontainers/base:2-ubuntu-24.04",
+    "features": {
+      "ghcr.io/devcontainers/features/node:2": {
+        "version": "22"
+      },
+      "devbase": {}
+    }
+  },
   "node_project": {
     "image": "mcr.microsoft.com/devcontainers/base:2-ubuntu-24.04",
     "features": {

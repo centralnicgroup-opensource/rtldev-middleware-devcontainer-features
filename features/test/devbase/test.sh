@@ -98,6 +98,26 @@ check "banner reports the OS" bash -c 'cd /tmp && devbase-env-info | grep -qi "u
 # Option values are escaped on the way in for exactly this reason.
 check "config.env parses as shell" sh -n /usr/local/share/devbase/config.env
 
+# --- dependsOn -----------------------------------------------------------------
+# Neither of these is listed by this test's feature set, so their presence is entirely
+# the manifest's `dependsOn` doing its job. Asserting the binaries rather than the
+# manifest is the point: `installsAfter` would parse identically and install neither,
+# and the resulting container looks fine until the credential helper needs `gh`.
+check "dependsOn installed the gh CLI" command -v gh
+# -l so a PATH addition made in the login profile is picked up the way a real shell
+# would pick it up.
+check "dependsOn installed the claude CLI" bash -lc 'command -v claude'
+
+# This feature set lists no Node feature, so claude-code's fallback is exactly what ran
+# here — which makes the default test the positive case for the warning. The negative case
+# is in `node_pinned`, where a listed Node feature suppresses the fallback and the warning
+# must stay silent. A one-sided assertion would pass just as happily on a function that
+# warned unconditionally.
+check "the EOL Node fallback is reported" bash -c '
+    set -e
+    . /usr/local/share/devbase/setup.sh
+    devbase_warn_on_fallback_node 2>&1 | grep -q "EOL"'
+
 # --- setup.sh steps, asserted as effects -------------------------------------
 # These steps are what the Feature is for, and until now only the *recording* of their
 # option values was covered: nothing proved the step itself did anything. Each is called
@@ -164,12 +184,11 @@ check "a composer.json without composer is reported, not fatal" bash -c '
     . /usr/local/share/devbase/setup.sh
     devbase_setup_project_dependencies 2>&1 | grep -q "composer is missing"'
 
-check "a package.json without pnpm is reported, not fatal" bash -c '
-    set -e
-    rm -rf /tmp/nodews && mkdir -p /tmp/nodews && cd /tmp/nodews
-    printf "{}\n" > package.json
-    . /usr/local/share/devbase/setup.sh
-    devbase_setup_project_dependencies 2>&1 | grep -q "pnpm is missing"'
+# The matching pnpm branch is asserted in the `minimal` scenario, not here. It used to
+# live here because this base image had no Node either — but the claude-code feature
+# devbase depends on installs one, so devbase_setup_pnpm now succeeds during create and
+# the branch is unreachable under default options. `minimal` sets installPnpm=false, which
+# leaves pnpm genuinely absent rather than hidden behind a doctored PATH.
 
 check "a workspace with no manifest is a detail, not a fault" bash -c '
     set -e

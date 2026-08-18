@@ -76,9 +76,15 @@
         "ms-vscode-remote.remote-containers",
         "ms-azuretools.vscode-containers",
         "anthropic.claude-code",
-        "anthropic.claude-vscode"
+        "anthropic.claude-vscode",
+        "timonwong.shellcheck",
+        "foxundermoon.shell-format",
+        "redhat.vscode-yaml"
       ],
       "settings": {
+        "shellcheck.enable": true,
+        "shellcheck.customArgs": ["--severity=warning"],
+        "npm.packageManager": "pnpm",
         "terminal.integrated.defaultProfile.linux": "zsh",
         "terminal.integrated.profiles.linux": {
           "zsh": {
@@ -88,14 +94,17 @@
       }
     }
   },
+  "dependsOn": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
   "installsAfter": [
     "ghcr.io/devcontainers/features/common-utils",
     "ghcr.io/devcontainers/features/node",
     "ghcr.io/devcontainers/features/php",
     "ghcr.io/devcontainers/features/go",
     "ghcr.io/devcontainers/features/python",
-    "ghcr.io/devcontainers/features/java",
-    "ghcr.io/devcontainers/features/github-cli"
+    "ghcr.io/devcontainers/features/java"
   ],
   "postCreateCommand": "zsh /usr/local/bin/devbase-post-create.sh",
   "postAttachCommand": "zsh /usr/local/bin/devbase-post-attach.sh"

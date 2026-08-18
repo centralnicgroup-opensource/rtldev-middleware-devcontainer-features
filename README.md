@@ -18,11 +18,14 @@ Add one entry to your repository's `.devcontainer/devcontainer.json`:
 ```jsonc
 "features": {
   "ghcr.io/devcontainers/features/node:2": { "version": "lts" },
-  "ghcr.io/devcontainers/features/github-cli:1": {},
-  "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
   "ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:1": {}
 }
 ```
+
+You do not need to list `github-cli` or `claude-code`: `devbase` declares both in
+`dependsOn`, so they are installed — and installed _before_ it — whether or not your
+feature list mentions them. Listing them anyway is harmless but redundant. Language
+runtimes are the opposite: `devbase` installs none, so `node` above is yours to keep.
 
 Rebuild the container. That is the whole integration for a repository whose defaults
 are fine.
@@ -49,6 +52,35 @@ instead — the frames come with this entry already in place.
 language runtime** — those stay in each repository's own feature list, and `devbase`
 declares `installsAfter` for all of them so its setup steps run once the runtimes
 exist.
+
+Two non-runtime features it does _not_ leave to the consumer, declared in `dependsOn`
+rather than `installsAfter`: **`github-cli`**, because the `gh` credential helper below
+is useless without `gh`, and **`claude-code`**, because it is on every one of our
+machines anyway. `installsAfter` is only a hint — it orders a feature that is already in
+the list and does nothing when it is absent — so it could never have carried these two.
+
+> **Keep listing the Node feature.** `claude-code`'s installer checks for `node` and, if it
+> finds none, installs **Node 18 from nodesource** — a release that went EOL in April 2025.
+> Its `installsAfter: node` means an explicit Node feature installs first and suppresses
+> that fallback entirely, so a repository that lists `node` gets exactly the version it
+> asked for. A repository that lists none silently gets the EOL 18, plus a `node` line in
+> the attach banner and an `installPnpm` that succeeds where it used to report a missing
+> toolchain. `devbase` still installs no runtime _itself_, but "no runtime unless you asked
+> for one" is no longer true of the image it produces.
+>
+> Putting `node` in `devbase`'s own `dependsOn` looks like the fix and is not: the CLI
+> installs both instances rather than deduplicating them when the options differ, and
+> `devbase`'s runs **second**, so its `lts` overwrites a consumer's pin — a repository on
+> Node 22 measurably ended up on 24. The `node_pinned` scenario guards against that
+> returning. Instead, post-create detects the fallback and says so:
+>
+> ```
+> => [ERROR] Node v18.20.8 came from claude-code's fallback, and 18.x is EOL
+>    Add "ghcr.io/devcontainers/features/node:2": { "version": "lts" } to devcontainer.json
+> ```
+>
+> It reports and moves on — installing a runtime is the one thing this Feature must not
+> do, and the fix is one line in your `devcontainer.json`.
 
 What it does, on first create and on every attach:
 

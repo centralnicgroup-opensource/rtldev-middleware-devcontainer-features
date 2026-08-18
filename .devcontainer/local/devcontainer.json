@@ -30,7 +30,8 @@
     },
     // Needed to run `pnpm features:test` from inside this container.
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {},
+    // github-cli and claude-code come from devbase's `dependsOn` — see the default
+    // config. Here they exercise it straight from the working-tree copy.
     "./devbase": {}
   },
 
