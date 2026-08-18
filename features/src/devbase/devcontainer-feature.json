@@ -1,6 +1,6 @@
 {
   "id": "devbase",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "RTLDEV Middleware dev base",
   "description": "Shared devcontainer behaviour for RTLDEV middleware repositories: zsh with the team prompt, commitizen, pnpm, the gh credential helper, persistent shell history and an on-attach toolchain banner. Language toolchains stay in the consuming repository's own feature list — this Feature deliberately installs no runtime.",
   "documentationURL": "https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features#the-devbase-feature",

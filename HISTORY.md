@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.1.0...v1.2.0) (2026-08-18)
+
+
+### Features
+
+* **devbase:** depend on the node feature and drop installPnpm ([b515efc](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/b515efc8087eec98b1634065f6442da550276d4b))
+
 # [1.1.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.0.0...v1.1.0) (2026-08-18)
 
 
