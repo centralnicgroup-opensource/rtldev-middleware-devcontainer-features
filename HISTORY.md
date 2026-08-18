@@ -1,3 +1,15 @@
+# [1.1.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.0.0...v1.1.0) (2026-08-18)
+
+
+### Bug Fixes
+
+* **devbase:** bootstrap shell history instead of waiting for a file to appear ([e3bbf29](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/e3bbf29e13f88b6bbe8071e0541c9faa0656910d))
+
+
+### Features
+
+* **devbase:** install github-cli and claude-code via dependsOn ([b7c66b9](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/b7c66b97e84b63c2fc3a179db84bc97296e5afda))
+
 # 1.0.0 (2026-08-17)
 
 
