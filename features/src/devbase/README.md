@@ -1,7 +1,7 @@
 
 # RTLDEV Middleware dev base (devbase)
 
-Shared devcontainer behaviour for RTLDEV middleware repositories: zsh with the team prompt, commitizen, pnpm, the gh credential helper, persistent shell history and an on-attach toolchain banner. Language toolchains stay in the consuming repository's own feature list — this Feature deliberately installs no runtime.
+Shared devcontainer behaviour for RTLDEV middleware repositories: zsh with the team prompt, commitizen, pnpm, the gh credential helper, persistent shell history and an on-attach toolchain banner. Pulls in Node LTS (which also provides pnpm), the GitHub CLI and Claude Code as dependencies; other language toolchains stay in the consuming repository's own feature list.
 
 ## Example Usage
 
