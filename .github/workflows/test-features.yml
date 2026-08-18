@@ -26,13 +26,13 @@ jobs:
         feature:
           - devbase
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Without this the job runs on whatever Node the runner image happens to
       # ship — Node 22 at the time of writing, below the >=24.15.0 this project
       # declares in package.json engines. lts/* matches lint.yml and release.yml,
       # so all three workflows move together.
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: lts/*
 
