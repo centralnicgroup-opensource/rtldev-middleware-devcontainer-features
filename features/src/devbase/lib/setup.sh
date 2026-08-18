@@ -35,27 +35,6 @@ _devbase_in_ci() {
 # Node toolchain
 # ---------------------------------------------------------------------------
 
-# devbase_warn_on_fallback_node — flag a Node nobody chose.
-#
-# devbase depends on claude-code, whose installer adds its own Node when it finds
-# none — Node 18 from nodesource, EOL since April 2025. Its `installsAfter: node`
-# means a repository that lists the Node feature suppresses that path entirely, so
-# the apt source below is present if and only if none was listed. Before this
-# dependency existed the same repository got no Node at all and said so loudly;
-# now it silently gets a dead one, which is the worse failure of the two.
-#
-# Reported, never repaired: installing a runtime is exactly what this Feature must
-# not do, and the fix is one line in the consumer's devcontainer.json.
-devbase_warn_on_fallback_node() {
-    grep -q 'node_18\.x' /etc/apt/sources.list.d/nodesource.list 2>/dev/null || return 0
-
-    local current
-    current="$(node --version 2>/dev/null)" || current=""
-    log_error "Node ${current:-18.x} came from claude-code's fallback, and 18.x is EOL"
-    log_detail 'Add "ghcr.io/devcontainers/features/node:2": { "version": "lts" } to devcontainer.json'
-    log_detail "It installs first and suppresses this fallback, so you get the version you pick"
-}
-
 # devbase_setup_npm_floor — raise npm to the major version package.json asks for.
 #
 # The Node feature ships whatever npm the Node release bundles, which regularly

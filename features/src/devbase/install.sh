@@ -28,7 +28,6 @@ SHARE_DIR="/usr/local/share/devbase"
 # form — an empty boolean has no meaning, so falling back to the default is right.
 COMMON_PACKAGES="${COMMONPACKAGES:-true}"
 TIMEZONE="${TIMEZONE-Europe/Berlin}"
-INSTALL_PNPM="${INSTALLPNPM:-true}"
 GLOBAL_PACKAGES="${GLOBALPACKAGES-commitizen@latest,cz-conventional-changelog@latest}"
 ZSH_AUTOSUGGESTIONS="${ZSHAUTOSUGGESTIONS:-true}"
 HISTORY_PERSISTENCE="${HISTORYPERSISTENCE:-true}"
@@ -210,7 +209,6 @@ cat >"${SHARE_DIR}/config.env" <<EOF
 # Feature's options in devcontainer.json and rebuild instead.
 DEVBASE_USER="$(esc "${USERNAME}")"
 DEVBASE_USER_HOME="$(esc "${USER_HOME}")"
-DEVBASE_INSTALL_PNPM="$(esc "${INSTALL_PNPM}")"
 DEVBASE_GLOBAL_PACKAGES="$(esc "${GLOBAL_PACKAGES}")"
 DEVBASE_ZSH_AUTOSUGGESTIONS="$(esc "${ZSH_AUTOSUGGESTIONS}")"
 DEVBASE_HISTORY_PERSISTENCE="$(esc "${HISTORY_PERSISTENCE}")"

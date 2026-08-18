@@ -65,8 +65,8 @@ environment.
   it does not declare `remoteUser`.
 - **`mounts` is allowed but deliberately unused here.** It is static JSON with no option
   substitution, so `historyPersistence: false` could not switch off a `/WSL_USER` mount
-  declared by this Feature — the opt-out would become a lie, the same trap as
-  `installPnpm` versus the node feature's own pnpm. It would also be un-declinable for
+  declared by this Feature — the opt-out would become a lie, the trap that cost
+  `installPnpm` its existence once the node dependency brought its own pnpm. It would also be un-declinable for
   every consumer, and would bake the `${localEnv:HOME}${localEnv:USERPROFILE}` host-shape
   trick into the published artifact. The Feature looks for `/WSL_USER` and skips when it is
   absent instead — that absence is exactly what the report-and-skip rule exists for.
@@ -78,15 +78,23 @@ environment.
   `gh`) and `claude-code`. Adding to `dependsOn` puts software in every consumer's image
   with no option to decline, so it is a `feat(devbase)` and needs a test asserting the
   binary — never list the same feature in both. Check what a dependency drags in before
-  adding one: `claude-code` installs its own Node (EOL 18 from nodesource) when it finds
-  none, which is why `installPnpm` now succeeds on a base image with no Node feature and
-  why the pnpm-missing branch is asserted in the `minimal` scenario rather than the
-  default test.
-- **`node` must stay out of `dependsOn`** — it was tried and reverted, measurably. Two
-  instances of one feature with different options do not deduplicate: both install, the
-  dependency-expanded one runs second, and `devbase`'s `lts` overwrote a consumer's pinned
-  22 with 24. The `node_pinned` scenario fails if it comes back. The node feature also
-  ships `pnpmVersion: latest`, so depending on it would make `installPnpm: false` a lie.
+  adding one: `claude-code` installs its own Node when it finds none, and that fallback is
+  **EOL 18 from nodesource** — which is why `node` is a dependency too, and why removing it
+  would silently put every repository that does not list its own on a dead runtime.
+- **`node` is in `dependsOn` at `lts`, and that makes devbase the owner of the Node
+  version.** It rests on one CLI behaviour: two instances of a feature with _identical_
+  options deduplicate, differing ones do not — both install and the dependency-expanded
+  one runs second. Every repository pinning `lts` is therefore a no-op collapse
+  (`node_project`), while a repository pinning anything else silently loses its pin
+  (`node_pinned` asserts this so it stays visible). A repository that genuinely needs
+  another major is a change here, not a local workaround — and changing devbase's pin
+  changes the runtime under every consumer at once, so it is a `feat` at minimum.
+- **The node feature ships `pnpmVersion: latest`, so pnpm exists in every container** and
+  `installPnpm` was **removed** rather than left as a flag that decided nothing — normally a
+  major, taken as part of a `feat` only because nothing consumes this Feature yet. Do not
+  reintroduce it: `devbase_setup_pnpm` still runs, unconditionally, and is a no-op in any
+  normal build. The `pnpm is missing` branch it guards is unreachable in a real build and is
+  asserted in `test.sh` with an emptied `PATH`.
 - **RTK is here rather than in each repository's Dockerfile** (RSRMID-2933) because the
   hook that calls it lives in the bind-mounted `~/.claude/settings.json` — shared with the
   host — while the binary is not, so a container without it fires a hook that exits 127 on

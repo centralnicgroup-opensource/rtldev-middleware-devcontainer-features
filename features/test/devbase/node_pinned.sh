@@ -1,43 +1,42 @@
 #!/usr/bin/env bash
 #
-# devbase Feature — a consumer that pins a specific Node version.
+# devbase Feature — a consumer that pins a Node version other than devbase's.
 #
-# Two things this guards, both consequences of devbase depending on claude-code:
+# devbase declares node:2 at "lts" in `dependsOn`, which makes it the owner of the Node
+# version rather than a repository that pins its own. This scenario pins 22 and asserts
+# that devbase's lts wins anyway — not because overriding a pin is desirable, but because
+# it is what the CLI does and someone will eventually hit it:
 #
-#   1. claude-code installs its own Node when it cannot find one, and that fallback is
-#      Node 18 from nodesource — EOL. Its `installsAfter: node` is what suppresses the
-#      fallback, so a repository that lists node must end up with *its* Node and no
-#      nodesource apt source alongside.
-#   2. devbase must not disturb the pin. node was tried in devbase's `dependsOn` at "lts"
-#      and had to be reverted: the CLI installs both instances rather than deduplicating
-#      them, devbase's ran second, and its `default -> lts/*` overwrote a pinned 22 with
-#      24. Anything that puts node back into `dependsOn` fails here first.
+#   two instances of one feature with different options are not deduplicated. Both
+#   install, the dependency-expanded one runs second, and its `default -> lts/*` alias
+#   replaces the pin. Identical options *are* deduplicated, which is why the team
+#   convention of pinning lts everywhere costs nothing — see the node_project scenario.
+#
+# So this file exists to make the loss of the pin visible and deliberate. A repository that
+# genuinely needs a different major cannot get it from here; that is a change to devbase's
+# `dependsOn`, not something to work around per repository.
 
 set -e
 
 # shellcheck disable=SC1091
 source dev-container-features-test-lib
 
-# Anchored on "v22." so a 22.x patch bump does not churn the test, but a slide onto lts
-# or onto claude-code's EOL 18 fallback fails it.
-check "the consumer's Node pin is left alone" bash -lc 'node -v | grep -q "^v22\."'
+# Asserted as a negative on purpose. Anchoring on the current lts major would churn this
+# test every time lts moves, while "not the pinned 22" is stable and still fails for the
+# change that matters: drop node from devbase's dependsOn and this goes green on v22.
+check "devbase's lts wins over a repository's own Node pin" bash -lc '
+    set -e
+    node -v
+    ! node -v | grep -q "^v22\."'
 
-# The version check above would catch the nodesource fallback only by luck — it installs
-# to /usr/bin while the node feature's nvm build shadows it on PATH. Assert the apt source
-# directly, which is present if and only if that installer ran.
-check "claude-code added no second Node from nodesource" bash -c \
+# claude-code installs its own Node only when it cannot find one, and that fallback is
+# Node 18 from nodesource — EOL. With node in dependsOn it can never run, and this is what
+# would catch it starting to: the apt source exists if and only if that installer ran.
+check "claude-code added no Node of its own" bash -c \
     '! test -e /etc/apt/sources.list.d/nodesource.list'
 
-# The negative half of the EOL-fallback warning; the default test asserts it fires. A
-# warning that cannot stay quiet would nag every correctly-configured repository into
-# ignoring it, which costs more than not having it.
-check "no EOL warning when the repository lists its own Node" bash -c '
-    set -e
-    . /usr/local/share/devbase/setup.sh
-    test -z "$(devbase_warn_on_fallback_node 2>&1)"'
-
-# devbase's npm-dependent steps are the reason the Node ordering matters at all, so assert
-# they completed rather than reporting a missing toolchain.
-check "pnpm installed against the pinned Node" bash -lc 'command -v pnpm'
+# devbase's npm-dependent steps are the reason the dependency exists, so assert they
+# completed rather than reporting a missing toolchain.
+check "pnpm is present" bash -lc 'command -v pnpm'
 
 reportResults

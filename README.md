@@ -22,10 +22,12 @@ Add one entry to your repository's `.devcontainer/devcontainer.json`:
 }
 ```
 
-You do not need to list `github-cli` or `claude-code`: `devbase` declares both in
-`dependsOn`, so they are installed — and installed _before_ it — whether or not your
-feature list mentions them. Listing them anyway is harmless but redundant. Language
-runtimes are the opposite: `devbase` installs none, so `node` above is yours to keep.
+Only the second line is strictly required. `devbase` declares `node` (at `lts`),
+`github-cli` and `claude-code` in `dependsOn`, so it installs all three itself, before
+itself. The `node` entry above is kept because it deduplicates with `devbase`'s own — same
+feature, same options, one install — and it documents the runtime at the point people look
+for it. Other runtimes (php, go, python, java) are genuinely yours: `devbase` installs
+none of those and only orders itself after them.
 
 Rebuild the container. That is the whole integration for a repository whose defaults
 are fine.
@@ -49,38 +51,35 @@ instead — the frames come with this entry already in place.
 ## The `devbase` Feature
 
 `devbase` is the shared _behaviour_ half of our devcontainer setup. It installs **no
-language runtime** — those stay in each repository's own feature list, and `devbase`
-declares `installsAfter` for all of them so its setup steps run once the runtimes
-exist.
+language runtime of its own** — php, go, python and java stay in each repository's feature
+list, and `devbase` declares `installsAfter` for them so its setup steps run once those
+runtimes exist. Node is the exception, and a deliberate one: see below.
 
-Two non-runtime features it does _not_ leave to the consumer, declared in `dependsOn`
-rather than `installsAfter`: **`github-cli`**, because the `gh` credential helper below
-is useless without `gh`, and **`claude-code`**, because it is on every one of our
-machines anyway. `installsAfter` is only a hint — it orders a feature that is already in
-the list and does nothing when it is absent — so it could never have carried these two.
+Three features it does _not_ leave to the consumer, declared in `dependsOn` rather than
+`installsAfter`: **`github-cli`**, because the `gh` credential helper below is useless
+without `gh`; **`claude-code`**, because it is on every one of our machines anyway; and
+**`node` at `lts`**, because `devbase`'s own pnpm and commitizen steps need npm, and
+because `claude-code` installs **Node 18 from nodesource** — EOL since April 2025 — when it
+cannot find a Node of its own. `installsAfter` is only a hint: it orders a feature the
+consumer already listed and does nothing when they did not, so it could never have carried
+these three.
 
-> **Keep listing the Node feature.** `claude-code`'s installer checks for `node` and, if it
-> finds none, installs **Node 18 from nodesource** — a release that went EOL in April 2025.
-> Its `installsAfter: node` means an explicit Node feature installs first and suppresses
-> that fallback entirely, so a repository that lists `node` gets exactly the version it
-> asked for. A repository that lists none silently gets the EOL 18, plus a `node` line in
-> the attach banner and an `installPnpm` that succeeds where it used to report a missing
-> toolchain. `devbase` still installs no runtime _itself_, but "no runtime unless you asked
-> for one" is no longer true of the image it produces.
+> **On the Node pin.** Keep `"ghcr.io/devcontainers/features/node:2": { "version": "lts" }`
+> in your `devcontainer.json` if it is already there — identical options deduplicate, so it
+> collapses into `devbase`'s own entry and changes nothing. It is now optional rather than
+> required.
 >
-> Putting `node` in `devbase`'s own `dependsOn` looks like the fix and is not: the CLI
-> installs both instances rather than deduplicating them when the options differ, and
-> `devbase`'s runs **second**, so its `lts` overwrites a consumer's pin — a repository on
-> Node 22 measurably ended up on 24. The `node_pinned` scenario guards against that
-> returning. Instead, post-create detects the fallback and says so:
+> What you cannot do is pin a _different_ version. Differing options do **not** deduplicate:
+> both instances install, `devbase`'s runs second, and its `default -> lts/*` replaces
+> yours — a repository asking for 22 measurably ended up on 24. So `devbase` owns the Node
+> version for every consumer. If a repository genuinely needs another major, that is a
+> change to `devbase`'s `dependsOn` and a release, not something to arrange locally. The
+> `node_pinned` scenario asserts the override so it stays visible rather than surprising.
 >
-> ```
-> => [ERROR] Node v18.20.8 came from claude-code's fallback, and 18.x is EOL
->    Add "ghcr.io/devcontainers/features/node:2": { "version": "lts" } to devcontainer.json
-> ```
->
-> It reports and moves on — installing a runtime is the one thing this Feature must not
-> do, and the fix is one line in your `devcontainer.json`.
+> A knock-on: the Node feature ships `pnpmVersion: latest`, so pnpm is present in every
+> container before `devbase` runs. The `installPnpm` option therefore decided nothing and
+> **has been removed** — pnpm is now simply part of what you get. Nothing consumes this
+> Feature yet, which is the only reason dropping an option did not need a major.
 
 What it does, on first create and on every attach:
 
@@ -119,7 +118,6 @@ All optional; the defaults are what php-sdk and mcp-dis want.
 | ---------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `commonPackages`             | `true`                                               | Installs `wget jq git zip unzip curl zsh shellcheck`. Turn off for a base image that already has them.                                                                       |
 | `timezone`                   | `Europe/Berlin`                                      | Written to `/etc/localtime` and `/etc/timezone`. Empty string leaves the image alone.                                                                                        |
-| `installPnpm`                | `true`                                               | Installs pnpm globally on first create. Needs a Node toolchain in the container.                                                                                             |
 | `globalPackages`             | `commitizen@latest,cz-conventional-changelog@latest` | Comma-separated global pnpm installs. Empty installs nothing.                                                                                                                |
 | `zshAutosuggestions`         | `true`                                               | Installs the zsh-autosuggestions plugin.                                                                                                                                     |
 | `historyPersistence`         | `true`                                               | Symlinks `~/.zsh_history` to `/WSL_USER/.zsh_history`, creating the host file if it does not exist yet. Needs the host home mounted at `/WSL_USER`; skipped silently if not. |

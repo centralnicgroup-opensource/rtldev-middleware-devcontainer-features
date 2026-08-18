@@ -17,7 +17,6 @@ Shared devcontainer behaviour for RTLDEV middleware repositories: zsh with the t
 |-----|-----|-----|-----|
 | commonPackages | Install the small package set every repository ends up needing anyway (wget, jq, git, zip, unzip, curl, shellcheck). Set false when the base image already provides them or the image must stay minimal. | boolean | true |
 | timezone | Container timezone, written to /etc/localtime and /etc/timezone. Set to an empty string to leave the image's timezone untouched. | string | Europe/Berlin |
-| installPnpm | Install pnpm globally on first create. Requires a Node toolchain in the container — list the Node feature too, or the step reports it as missing and moves on. | boolean | true |
 | globalPackages | Comma-separated packages to install globally with pnpm on first create. Empty string installs nothing. | string | commitizen@latest,cz-conventional-changelog@latest |
 | zshAutosuggestions | Install the zsh-autosuggestions plugin. Suggestions are driven by $HISTFILE, so they survive container rebuilds when historyPersistence is on. | boolean | true |
 | historyPersistence | Symlink ~/.zsh_history to /WSL_USER/.zsh_history so shell history survives rebuilds. Needs the host home bind-mounted at /WSL_USER by the frame; skipped silently when that mount is absent, and always skipped in CI. | boolean | true |

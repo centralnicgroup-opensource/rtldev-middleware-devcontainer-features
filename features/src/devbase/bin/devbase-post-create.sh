@@ -38,14 +38,11 @@ main() {
     # shellcheck disable=SC2064
     trap "cd '${original_dir}'" EXIT
 
-    # Ungated and first: it diagnoses the runtime every step below is built on, and a
-    # repository that has opted out of the pnpm step still wants to know its Node is dead.
-    devbase_warn_on_fallback_node
-
-    if [ "${DEVBASE_INSTALL_PNPM:-true}" = "true" ]; then
-        devbase_setup_npm_floor
-        devbase_setup_pnpm
-    fi
+    # Unconditional since installPnpm was removed. pnpm arrives with the node dependency,
+    # so devbase_setup_pnpm is a no-op in any normal build and remains only to cover a base
+    # image that somehow carries npm without it. The npm floor is separate work either way.
+    devbase_setup_npm_floor
+    devbase_setup_pnpm
 
     # Before the global packages: sourcing .zshrc there triggers the plugin's
     # widget setup, so the plugin needs to exist first.

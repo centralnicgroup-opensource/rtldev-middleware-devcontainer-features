@@ -17,8 +17,6 @@ check "shared library still installed" test -f /usr/local/share/devbase/log.sh
 check "entrypoints still installed" test -x /usr/local/bin/devbase-post-create.sh
 
 # The opt-outs must be recorded, so the lifecycle scripts skip those steps.
-check "pnpm opt-out recorded" \
-    grep -q 'DEVBASE_INSTALL_PNPM="false"' /usr/local/share/devbase/config.env
 check "global packages opt-out recorded" \
     grep -q 'DEVBASE_GLOBAL_PACKAGES=""' /usr/local/share/devbase/config.env
 check "autosuggestions opt-out recorded" \
@@ -63,21 +61,5 @@ check "post-attach does not autoload env.sh when disabled" bash -c '
     rm -f "${HOME}/.zshenv"
     zsh /usr/local/bin/devbase-post-attach.sh >/dev/null 2>&1
     ! test -e "${HOME}/.zshenv"'
-
-# The "manifest present, tool absent" rule for pnpm is asserted here rather than in the
-# default-options test, because installPnpm=false is now the only place pnpm is genuinely
-# missing: devbase depends on claude-code, whose installer brings a Node runtime, so under
-# default options pnpm installs successfully and the branch below cannot be reached.
-#
-# The guard first. Without it, a future change that puts pnpm in the image would turn the
-# check underneath into a check that cannot fail — it would stop exercising the branch and
-# still report SUCCESS.
-check "pnpm is genuinely absent when installPnpm is off" bash -c '! command -v pnpm'
-check "a package.json without pnpm is reported, not fatal" bash -c '
-    set -e
-    rm -rf /tmp/nodews && mkdir -p /tmp/nodews && cd /tmp/nodews
-    printf "{}\n" > package.json
-    . /usr/local/share/devbase/setup.sh
-    devbase_setup_project_dependencies 2>&1 | grep -q "pnpm is missing"'
 
 reportResults

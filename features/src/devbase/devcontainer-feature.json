@@ -17,11 +17,6 @@
       "default": "Europe/Berlin",
       "description": "Container timezone, written to /etc/localtime and /etc/timezone. Set to an empty string to leave the image's timezone untouched."
     },
-    "installPnpm": {
-      "type": "boolean",
-      "default": true,
-      "description": "Install pnpm globally on first create. Requires a Node toolchain in the container — list the Node feature too, or the step reports it as missing and moves on."
-    },
     "globalPackages": {
       "type": "string",
       "default": "commitizen@latest,cz-conventional-changelog@latest",
@@ -95,12 +90,14 @@
     }
   },
   "dependsOn": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "lts"
+    },
     "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   "installsAfter": [
     "ghcr.io/devcontainers/features/common-utils",
-    "ghcr.io/devcontainers/features/node",
     "ghcr.io/devcontainers/features/php",
     "ghcr.io/devcontainers/features/go",
     "ghcr.io/devcontainers/features/python",

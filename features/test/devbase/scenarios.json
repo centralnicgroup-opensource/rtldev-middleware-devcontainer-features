@@ -5,7 +5,6 @@
       "devbase": {
         "commonPackages": false,
         "timezone": "",
-        "installPnpm": false,
         "globalPackages": "",
         "zshAutosuggestions": false,
         "historyPersistence": false,

@@ -35,8 +35,11 @@
     // a working Docker daemon of its own. Without it the test suite cannot run here
     // and you are back to pushing a branch to find out whether a change works.
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
+
+    // github-cli and claude-code are deliberately NOT listed: devbase declares both
+    // in `dependsOn`, so it pulls them in itself. Leaving them out is what makes this
+    // container a check of that guarantee rather than a config that would still have
+    // `gh` if the dependency silently stopped resolving.
 
     // This repository's own dev environment uses the Feature it ships — the same way a
     // consumer does, from the registry. So this container is a standing check that the
@@ -71,19 +74,11 @@
     "vscode": {
       // devbase already contributes the shared set and the zsh terminal profile.
       // These are the ones specific to working on shell and container definitions.
-      "extensions": [
-        "timonwong.shellcheck",
-        "foxundermoon.shell-format",
-        "redhat.vscode-yaml"
-      ],
       "settings": {
-        "shellcheck.enable": true,
-        "shellcheck.customArgs": ["--severity=warning"],
         "files.associations": {
           "devcontainer-feature.json": "jsonc",
           "*.conf": "shellscript"
-        },
-        "npm.packageManager": "pnpm"
+        }
       }
     }
   },
