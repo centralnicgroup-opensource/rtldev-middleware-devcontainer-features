@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.2.1...v1.2.2) (2026-08-18)
+
+
+### Bug Fixes
+
+* **devbase:** stop claiming the Feature installs no runtime ([e59d5c6](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/e59d5c675d27f1aead5982caf4ae4eadbb088a18))
+
 ## [1.2.1](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.2.0...v1.2.1) (2026-08-18)
 
 
