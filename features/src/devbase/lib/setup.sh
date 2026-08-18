@@ -219,16 +219,42 @@ devbase_setup_history_persistence() {
     fi
 
     log_info "Linking shell history..."
-    local source="/WSL_USER/.zsh_history"
+    local mount="/WSL_USER"
+    local source="${mount}/.zsh_history"
     local target="${HOME}/.zsh_history"
 
     if [ -L "${target}" ]; then
         log_detail "History symlink already in place"
-    elif [ -f "${source}" ]; then
-        ln -sf "${source}" "${target}"
+        return 0
+    fi
+
+    if [ ! -d "${mount}" ]; then
+        log_detail "No ${source} on the host mount — history stays container-local"
+        return 0
+    fi
+
+    # An empty mount is not a host home: Docker creates a missing bind source as an
+    # empty directory, so this is the frame's source path failing to resolve — most
+    # often the ${localEnv:HOME}${localEnv:USERPROFILE} concatenation on a host that
+    # defines both. Creating a history file inside it would persist nothing and hide
+    # the cause, and this is the only place the mistake becomes visible at all.
+    if [ -z "$(ls -A "${mount}" 2>/dev/null)" ]; then
+        log_error "${mount} is empty — check that mount's source path in devcontainer.json"
+        return 0
+    fi
+
+    # A host that has never run zsh has no history file, and nothing else will create
+    # one: waiting for it to appear is what kept persistence from ever starting.
+    if [ ! -f "${source}" ] && ! touch "${source}" 2>/dev/null; then
+        log_error "Could not create ${source} — history stays container-local"
+        return 0
+    fi
+
+    ln -sf "${source}" "${target}"
+    if [ -L "${target}" ] && [ -e "${target}" ]; then
         log_success "History linked to ${source}"
     else
-        log_detail "No ${source} on the host mount — history stays container-local"
+        log_error "Could not link ${target} to ${source}"
     fi
 }
 

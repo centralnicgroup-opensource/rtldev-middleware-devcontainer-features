@@ -143,8 +143,10 @@ check "gh credential helper skips outside a git tree" bash -c '
     devbase_setup_gh_credential_helper | grep -q "Not a git working tree"'
 
 # The history symlink is the whole of historyPersistence, and it depends on a host mount
-# the consuming frame provides. All three branches matter, because a missing mount is a
-# supported configuration and must stay a detail rather than an error.
+# the consuming frame provides. Every branch matters, and they are not interchangeable: a
+# missing mount is a supported configuration and must stay a detail, an empty one is a
+# broken mount source that must not stay silent, and a mount with no history file yet is
+# a first run that has to be bootstrapped rather than skipped forever.
 check "shell history is linked when the host mount exists" bash -c '
     set -e
     sudo mkdir -p /WSL_USER && sudo touch /WSL_USER/.zsh_history
@@ -171,12 +173,43 @@ check "shell history is skipped in CI" bash -c '
     . /usr/local/share/devbase/setup.sh
     devbase_setup_history_persistence | grep -q "Skipping history persistence in CI"'
 
+# The mount is there and the host simply has no history file yet — every first run on a
+# new machine. Skipping here is self-perpetuating: nothing else ever creates the file, so
+# the link is never made and history never begins to persist.
+check "shell history bootstraps when the host has no history file" bash -c '
+    set -e
+    sudo rm -rf /WSL_USER && sudo mkdir -p /WSL_USER
+    sudo touch /WSL_USER/.profile
+    sudo chown -R "$(id -un)" /WSL_USER
+    rm -f "${HOME}/.zsh_history"
+    export CI=false GITHUB_ACTIONS=false
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_history_persistence >/dev/null
+    test -f /WSL_USER/.zsh_history
+    test -L "${HOME}/.zsh_history"
+    [ "$(readlink "${HOME}/.zsh_history")" = "/WSL_USER/.zsh_history" ]'
+
+# Docker creates a missing bind source as an empty directory, so an empty /WSL_USER means
+# the frame resolved its source path to nothing — not that the host is new. Bootstrapping
+# into it would write a file nothing reads and report SUCCESS for persistence that cannot
+# work, which is precisely the failure this suite exists to prevent.
+check "an empty host mount is reported instead of bootstrapped" bash -c '
+    set -e
+    sudo rm -rf /WSL_USER && sudo mkdir -p /WSL_USER
+    sudo chown -R "$(id -un)" /WSL_USER
+    rm -f "${HOME}/.zsh_history"
+    export CI=false GITHUB_ACTIONS=false
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_history_persistence 2>&1 | grep -q "is empty"
+    ! test -e /WSL_USER/.zsh_history
+    ! test -e "${HOME}/.zsh_history"'
+
 # devbase_setup_project_dependencies is the step every consuming repository depends on,
 # and it had no coverage whatsoever: every scenario ran post-create from /tmp, where no
 # manifest exists, so neither the composer nor the Node branch was ever entered.
 #
-# This base image has neither composer nor pnpm, which makes it the right place to assert
-# the rule that a manifest whose tool is absent is reported and skipped, never fatal.
+# This base image has no composer, which makes it the right place to assert the rule that
+# a manifest whose tool is absent is reported and skipped, never fatal.
 check "a composer.json without composer is reported, not fatal" bash -c '
     set -e
     rm -rf /tmp/phpws && mkdir -p /tmp/phpws && cd /tmp/phpws

@@ -115,20 +115,20 @@ in each consumer's `devcontainer-lock.json`, and is picked up by Dependabot's
 
 All optional; the defaults are what php-sdk and mcp-dis want.
 
-| Option                       | Default                                              | What it does                                                                                                                |
-| ---------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `commonPackages`             | `true`                                               | Installs `wget jq git zip unzip curl zsh shellcheck`. Turn off for a base image that already has them.                      |
-| `timezone`                   | `Europe/Berlin`                                      | Written to `/etc/localtime` and `/etc/timezone`. Empty string leaves the image alone.                                       |
-| `installPnpm`                | `true`                                               | Installs pnpm globally on first create. Needs a Node toolchain in the container.                                            |
-| `globalPackages`             | `commitizen@latest,cz-conventional-changelog@latest` | Comma-separated global pnpm installs. Empty installs nothing.                                                               |
-| `zshAutosuggestions`         | `true`                                               | Installs the zsh-autosuggestions plugin.                                                                                    |
-| `historyPersistence`         | `true`                                               | Symlinks `~/.zsh_history` to `/WSL_USER/.zsh_history`. Needs the host home mounted at `/WSL_USER`; skipped silently if not. |
-| `ghCredentialHelper`         | `true`                                               | Points the workspace git credential helper at `gh auth git-credential`.                                                     |
-| `envInfoBanner`              | `true`                                               | Prints the toolchain banner on attach; also installs `devbase-env-info`.                                                    |
-| `installProjectDependencies` | `true`                                               | Installs from `composer.json` / `package.json` and seeds `.env` from `.env.example`.                                        |
-| `autoloadEnvScript`          | `true`                                               | Sources a workspace `env.sh` from `~/.zshenv` so new terminals inherit it.                                                  |
-| `installRtk`                 | `true`                                               | Installs RTK, the token-optimizing CLI proxy for Claude Code. Binary only — the hook stays in the mounted `~/.claude`.      |
-| `rtkVersion`                 | `0.45.0`                                             | RTK release to install, without the leading `v`. Checksum-verified against the release's `checksums.txt`.                   |
+| Option                       | Default                                              | What it does                                                                                                                                                                 |
+| ---------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `commonPackages`             | `true`                                               | Installs `wget jq git zip unzip curl zsh shellcheck`. Turn off for a base image that already has them.                                                                       |
+| `timezone`                   | `Europe/Berlin`                                      | Written to `/etc/localtime` and `/etc/timezone`. Empty string leaves the image alone.                                                                                        |
+| `installPnpm`                | `true`                                               | Installs pnpm globally on first create. Needs a Node toolchain in the container.                                                                                             |
+| `globalPackages`             | `commitizen@latest,cz-conventional-changelog@latest` | Comma-separated global pnpm installs. Empty installs nothing.                                                                                                                |
+| `zshAutosuggestions`         | `true`                                               | Installs the zsh-autosuggestions plugin.                                                                                                                                     |
+| `historyPersistence`         | `true`                                               | Symlinks `~/.zsh_history` to `/WSL_USER/.zsh_history`, creating the host file if it does not exist yet. Needs the host home mounted at `/WSL_USER`; skipped silently if not. |
+| `ghCredentialHelper`         | `true`                                               | Points the workspace git credential helper at `gh auth git-credential`.                                                                                                      |
+| `envInfoBanner`              | `true`                                               | Prints the toolchain banner on attach; also installs `devbase-env-info`.                                                                                                     |
+| `installProjectDependencies` | `true`                                               | Installs from `composer.json` / `package.json` and seeds `.env` from `.env.example`.                                                                                         |
+| `autoloadEnvScript`          | `true`                                               | Sources a workspace `env.sh` from `~/.zshenv` so new terminals inherit it.                                                                                                   |
+| `installRtk`                 | `true`                                               | Installs RTK, the token-optimizing CLI proxy for Claude Code. Binary only — the hook stays in the mounted `~/.claude`.                                                       |
+| `rtkVersion`                 | `0.45.0`                                             | RTK release to install, without the leading `v`. Checksum-verified against the release's `checksums.txt`.                                                                    |
 
 A stack elaborate enough to own its own setup turns the generic part off:
 
@@ -474,7 +474,16 @@ gets a working shell, just unthemed.
 **Shell history did not survive a rebuild.** `historyPersistence` needs the host home
 bind-mounted at `/WSL_USER`; check the frame's `mounts` (or the compose service's
 volumes). The step is skipped silently when the mount is absent, because that is a
-legitimate configuration.
+legitimate configuration. A host with no `~/.zsh_history` yet is _not_ that case — the
+file is created and linked, so persistence starts on the first create rather than waiting
+for a file nothing would ever write.
+
+**`/WSL_USER is empty` in post-create.** The mount exists but its source path resolved to
+nothing, and Docker created the missing source as an empty directory. On Windows hosts the
+usual cause is the `${localEnv:HOME}${localEnv:USERPROFILE}` idiom used to name the host
+home: it relies on exactly one of the two being set, and concatenates them into a
+nonexistent path when both are. Fix the `source=` in the frame's `mounts` — the Feature
+reports this rather than seeding a history file into a directory the host never sees.
 
 **`pnpm: command not found` in post-create.** No Node toolchain in the container. Add
 `ghcr.io/devcontainers/features/node:2` — `installsAfter` then guarantees it is installed
