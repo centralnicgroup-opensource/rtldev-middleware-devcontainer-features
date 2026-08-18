@@ -19,7 +19,12 @@
   "workspaceFolder": "/usr/share/${localWorkspaceFolderBasename}",
   "shutdownAction": "stopContainer",
 
-  "initializeCommand": "mkdir -p ${localEnv:HOME}/.claude",
+  // Both entries below guard a bind source in `mounts`, and neither is optional: Docker
+  // resolves a missing bind source by creating a *directory*, having no way to know
+  // whether a file was meant. Without the `touch`, a host with no ~/.gitconfig gets a
+  // directory at /home/vscode/.gitconfig and every git command fails on a path that
+  // looks right — a symptom that points at git rather than at this line.
+  "initializeCommand": "mkdir -p ${localEnv:HOME}/.claude && touch ${localEnv:HOME}/.gitconfig",
 
   "features": {
     // Node supplies the devcontainer CLI (`pnpm features:test`) and prettier.
@@ -89,6 +94,13 @@
     "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,readonly",
     "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,consistency=cached",
     // /WSL_USER is where devbase looks for .zsh_history to persist shell history.
+    // The concatenation is deliberate — devcontainer.json has no conditional, so it
+    // relies on exactly one of HOME and USERPROFILE being empty to yield whichever the
+    // host defines. A host that defines BOTH (not unusual on Windows, where HOME is
+    // often set alongside the built-in USERPROFILE) produces a nonexistent path that
+    // Docker then creates, so /WSL_USER is an empty directory: devbase finds no
+    // .zsh_history, logs that history stays container-local, and exits 0. Nothing fails
+    // and history silently stops surviving rebuilds — suspect this line first.
     "source=${localEnv:HOME}${localEnv:USERPROFILE},target=/WSL_USER,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
   ]
