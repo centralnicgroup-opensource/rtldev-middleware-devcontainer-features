@@ -52,12 +52,41 @@ environment.
   the manifest default so it stays runnable standalone; only the manifest one affects a
   real build, so `pnpm features:validate` fails when the two disagree. Values written to
   `config.env` are escaped — it is sourced, so an option value is shell input.
-- **A Feature cannot set** `name`, `workspaceMount`/`workspaceFolder`, `remoteUser`,
-  `forwardPorts`, `shutdownAction` or `initializeCommand`. Those belong to the consuming
-  repository's frame — do not try to move them here.
-- **`installsAfter`** lists the language features so the runtimes exist before
-  post-create runs. A new language runtime that post-create depends on must be added
-  there.
+- **A Feature's manifest is an allow-list, and anything outside it is dropped silently.**
+  The CLI takes only `onCreate`/`updateContent`/`postCreate`/`postStart`/
+  `postAttachCommand`, `init`, `privileged`, `capAdd`, `securityOpt`, `entrypoint`,
+  `mounts` and `customizations` from each Feature. `name`,
+  `workspaceMount`/`workspaceFolder`, `remoteUser`, `containerUser`, `remoteEnv`,
+  `forwardPorts`, `shutdownAction`, `updateRemoteUserUID` and `initializeCommand` are read
+  from the consuming repository's `devcontainer.json` only — put one here and it is not an
+  error, it just vanishes. `remoteUser` **is** inherited, which is the confusing part, but
+  from the base image's `devcontainer.metadata` label, authored from that image's own
+  devcontainer.json; no Feature can set it, `common-utils` included — it creates the user,
+  it does not declare `remoteUser`.
+- **`mounts` is allowed but deliberately unused here.** It is static JSON with no option
+  substitution, so `historyPersistence: false` could not switch off a `/WSL_USER` mount
+  declared by this Feature — the opt-out would become a lie, the same trap as
+  `installPnpm` versus the node feature's own pnpm. It would also be un-declinable for
+  every consumer, and would bake the `${localEnv:HOME}${localEnv:USERPROFILE}` host-shape
+  trick into the published artifact. The Feature looks for `/WSL_USER` and skips when it is
+  absent instead — that absence is exactly what the report-and-skip rule exists for.
+- **`installsAfter` orders, `dependsOn` installs.** `installsAfter` is only a hint: it
+  sequences a feature the consumer already listed and does nothing when they did not, so
+  it suits the language runtimes — devbase must not install those, only run after them. A
+  new language runtime that post-create depends on goes there. `dependsOn` actually pulls
+  the feature in, and carries `github-cli` (the credential helper is useless without
+  `gh`) and `claude-code`. Adding to `dependsOn` puts software in every consumer's image
+  with no option to decline, so it is a `feat(devbase)` and needs a test asserting the
+  binary — never list the same feature in both. Check what a dependency drags in before
+  adding one: `claude-code` installs its own Node (EOL 18 from nodesource) when it finds
+  none, which is why `installPnpm` now succeeds on a base image with no Node feature and
+  why the pnpm-missing branch is asserted in the `minimal` scenario rather than the
+  default test.
+- **`node` must stay out of `dependsOn`** — it was tried and reverted, measurably. Two
+  instances of one feature with different options do not deduplicate: both install, the
+  dependency-expanded one runs second, and `devbase`'s `lts` overwrote a consumer's pinned
+  22 with 24. The `node_pinned` scenario fails if it comes back. The node feature also
+  ships `pnpmVersion: latest`, so depending on it would make `installPnpm: false` a lie.
 - **RTK is here rather than in each repository's Dockerfile** (RSRMID-2933) because the
   hook that calls it lives in the bind-mounted `~/.claude/settings.json` — shared with the
   host — while the binary is not, so a container without it fires a hook that exits 127 on
@@ -134,6 +163,14 @@ artifact works.
   pinned to a major tag, so each rebuild resolves the newest `1.x` — which is the point of
   a dogfooding check. A digest pin would freeze it on a stale artifact. A _consuming_
   repository wants the opposite and has a lock file for it.
+- **Never make this frame rely on a guarantee that has not been released yet.** Because it
+  consumes the registry, the frame is only ever as correct as the _published_ Feature. The
+  moment `github-cli` was dropped from the feature list here, on the strength of a
+  `dependsOn` that existed only in the working tree, every rebuild produced a container
+  with no `gh` — and the failure surfaced as a `git push` dying in the credential helper,
+  nowhere near the cause. So the working-tree change lands and releases **first**, and the
+  frame stops listing the feature **after**. Removing something from this list is a bet
+  that the registry already provides it.
 
 ## Build, CI & Policies
 
@@ -238,7 +275,8 @@ Opus decides, Sonnet implements. Definitions live in `.claude/agents/`.
 ## Do NOT
 
 - Add a language runtime to `devbase` — runtimes come from the devcontainers language
-  features, and this Feature deliberately installs none
+  features, and this Feature installs none directly (a Node does arrive transitively via
+  the `claude-code` dependency; that is a known side effect, not licence to add more)
 - Hand-edit `version` in `devcontainer-feature.json` — semantic-release owns it
 - File a behaviour change under a non-releasing commit type, which silently ships nothing
 - Repoint this repository's devcontainer **away from** the published coordinate — the
