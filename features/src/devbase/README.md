@@ -38,6 +38,9 @@ Shared devcontainer behaviour for RTLDEV middleware repositories: zsh with the t
 - `ms-azuretools.vscode-containers`
 - `anthropic.claude-code`
 - `anthropic.claude-vscode`
+- `timonwong.shellcheck`
+- `foxundermoon.shell-format`
+- `redhat.vscode-yaml`
 
 
 
