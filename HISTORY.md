@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.2.0...v1.2.1) (2026-08-18)
+
+
+### Bug Fixes
+
+* **devcontainer:** fail the build on a stale working-tree Feature copy ([bcdee56](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/bcdee56b5f0f744a65e5ae39801da0e6acca0d2d))
+
 # [1.2.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.1.0...v1.2.0) (2026-08-18)
 
 
