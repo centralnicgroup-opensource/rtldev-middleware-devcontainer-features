@@ -27,23 +27,22 @@
   "initializeCommand": "mkdir -p ${localEnv:HOME}/.claude ${localEnv:HOME}/.ssh && touch ${localEnv:HOME}/.gitconfig ${localEnv:HOME}/.ssh/known_hosts",
 
   "features": {
-    // Node supplies the devcontainer CLI (`pnpm features:test`) and prettier.
-    "ghcr.io/devcontainers/features/node:2": {
-      "version": "lts"
-    },
     // `devcontainer features test` builds real containers, so this environment needs
     // a working Docker daemon of its own. Without it the test suite cannot run here
     // and you are back to pushing a branch to find out whether a change works.
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
 
-    // github-cli and claude-code are deliberately NOT listed: devbase declares both
-    // in `dependsOn`, so it pulls them in itself. Leaving them out is what makes this
-    // container a check of that guarantee rather than a config that would still have
-    // `gh` if the dependency silently stopped resolving.
-
-    // This repository's own dev environment uses the Feature it ships — the same way a
-    // consumer does, from the registry. So this container is a standing check that the
-    // *published* artifact actually works.
+    // node, github-cli and claude-code are deliberately NOT listed: devbase declares all
+    // three in `dependsOn` and pulls them in itself — node at lts, which is the Node the
+    // devcontainer CLI and prettier run on. Leaving them out is what makes this container
+    // a check of that guarantee rather than a config that would still have `gh` and a Node
+    // of its own if the dependency silently stopped resolving.
+    //
+    // Every removal from this list is a bet that the *published* Feature already provides
+    // it, because this list resolves devbase:1 from the registry. Dropping github-cli once
+    // on the strength of a dependsOn that existed only in the working tree is how every
+    // rebuild produced a container with no `gh`, surfacing as a `git push` dying in the
+    // credential helper. So the Feature change releases first and this list shrinks after.
     //
     // It is deliberately NOT the working tree, because the devcontainer CLI cannot
     // reference it. All three ways were tried and measured:
