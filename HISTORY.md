@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.2.2...v1.3.0) (2026-08-19)
+
+
+### Features
+
+* **devbase:** hide node_modules in the shipped VS Code settings ([b5af6e7](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/b5af6e7af58e4ff0f1ccb7ec1eff4cb675ea1ad4))
+
 ## [1.2.2](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.2.1...v1.2.2) (2026-08-18)
 
 
