@@ -41,7 +41,6 @@ Shared devcontainer behaviour for RTLDEV middleware repositories: zsh with the t
 - `foxundermoon.shell-format`
 - `redhat.vscode-yaml`
 
-
 ## Overriding the VS Code settings
 
 This Feature also contributes `customizations.vscode.settings` (shellcheck, the zsh
@@ -77,6 +76,7 @@ setting it to `false` — which is the supported way to opt out on purpose:
 ```jsonc
 "files.exclude": { "**/node_modules": false }
 ```
+
 
 ---
 
