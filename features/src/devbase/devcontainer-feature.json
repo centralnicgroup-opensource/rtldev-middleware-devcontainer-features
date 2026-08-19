@@ -77,6 +77,9 @@
         "redhat.vscode-yaml"
       ],
       "settings": {
+        "files.exclude": {
+          "**/node_modules": true
+        },
         "shellcheck.enable": true,
         "shellcheck.customArgs": ["--severity=warning"],
         "npm.packageManager": "pnpm",

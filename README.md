@@ -91,7 +91,35 @@ What it does, on first create and on every attach:
 - **Dependency installation** — `composer.json` via composer, `package.json` via pnpm,
   `.env` seeded from `.env.example`
 - **An attach banner** reporting the container, language and dependency versions
-- The shared **VS Code extension set** and the zsh terminal profile
+- The shared **VS Code extension set**, the zsh terminal profile and a few editor
+  settings — shellcheck, `npm.packageManager`, and `files.exclude` hiding
+  `**/node_modules`
+
+> **On overriding the VS Code settings.** A setting you declare in your own
+> `devcontainer.json` wins over the Feature's, and for an object-valued setting that is a
+> **whole-object replacement, not a deep merge** — VS Code does not merge object values
+> across settings scopes.
+>
+> `files.exclude` is the one this bites. A repository that adds `**/vendor` by declaring
+> its own `files.exclude` silently loses the inherited `**/node_modules` entry, because
+> its object replaces the Feature's rather than extending it. Restate what you want to
+> keep:
+>
+> ```jsonc
+> "customizations": {
+>   "vscode": {
+>     "settings": {
+>       "files.exclude": {
+>         "**/node_modules": true, // restate, or you lose it
+>         "**/vendor": true
+>       }
+>     }
+>   }
+> }
+> ```
+>
+> Which also means there is no separate opt-out to build: `"**/node_modules": false`
+> un-hides it, and so does simply leaving the key out of your own object.
 
 ## Why a Feature and not copied files
 

@@ -63,6 +63,18 @@ environment.
   from the base image's `devcontainer.metadata` label, authored from that image's own
   devcontainer.json; no Feature can set it, `common-utils` included — it creates the user,
   it does not declare `remoteUser`.
+- **An object-valued VS Code setting is replaced by the consumer, not deep-merged, so add
+  keys to the existing object.** `customizations.vscode.settings` currently ships one:
+  `files.exclude`. A consumer declaring their own `files.exclude` replaces the whole
+  object and silently loses `**/node_modules` — documented for them in `NOTES.md` and the
+  README, and the reason a second exclude belongs _inside_ that object rather than in a
+  new setting. A second `"files.exclude"` key would also fail `pnpm check:json`, which
+  rejects duplicate JSON keys. The manifest itself cannot carry this note: it is parsed
+  with `jq` by `scripts/validate-features.sh`, so a `//` comment fails
+  `pnpm features:validate` — hand-written Feature docs go in
+  `features/src/devbase/NOTES.md`, which `generate-docs` folds into the published README
+  at publish time (so `features/src/devbase/README.md` is generated — edit `NOTES.md`,
+  and keep the README in step by hand only to stay accurate before the next release).
 - **`mounts` is allowed but deliberately unused here.** It is static JSON with no option
   substitution, so `historyPersistence: false` could not switch off a `/WSL_USER` mount
   declared by this Feature — the opt-out would become a lie, the trap that cost
