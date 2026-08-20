@@ -24,7 +24,7 @@
   // whether a file was meant. Without the `touch`, a host with no ~/.gitconfig gets a
   // directory at /home/vscode/.gitconfig and every git command fails on a path that
   // looks right — a symptom that points at git rather than at this line.
-  "initializeCommand": "mkdir -p ${localEnv:HOME}/.claude ${localEnv:HOME}/.ssh && touch ${localEnv:HOME}/.gitconfig ${localEnv:HOME}/.ssh/known_hosts",
+  "initializeCommand": "touch ${localEnv:HOME}/.gitconfig",
 
   "features": {
     // `devcontainer features test` builds real containers, so this environment needs
@@ -85,13 +85,6 @@
   "remoteUser": "vscode",
 
   "mounts": [
-    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,readonly",
-    // Nested inside the read-only mount above, and writable: ssh has to append to
-    // known_hosts to record a host key, and cannot on a read-only mount. Without this
-    // every rebuild re-prompts for GitHub's key and every non-interactive ssh — a push
-    // from a script, a git fetch over ssh — fails host-key verification instead. The
-    // private key itself stays read-only, which is what the readonly above is for.
-    "source=${localEnv:HOME}/.ssh/known_hosts,target=/home/vscode/.ssh/known_hosts,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,consistency=cached",
     // /WSL_USER is where devbase looks for .zsh_history to persist shell history.
     // The concatenation is deliberate — devcontainer.json has no conditional, so it
