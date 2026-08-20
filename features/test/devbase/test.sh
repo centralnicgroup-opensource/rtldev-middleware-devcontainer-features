@@ -115,6 +115,49 @@ check "dependsOn installed the claude CLI" bash -lc 'command -v claude'
 # directly rather than through post-create so the assertion names the behaviour that
 # broke rather than "post-create failed somewhere".
 
+# devbase_setup_global_packages was the last step whose coverage stopped at the recorded
+# option value: nothing proved a single package ever reached the container. That is the
+# shape both defects this suite has shipped had — a green check for a step that did nothing.
+#
+# Asserted against the recorded list rather than a literal, for the same reason the RTK
+# version is: `globalPackages` is what a consumer changes, so the check has to follow the
+# option instead of needing an edit alongside it. `pnpm ls -g` is queried state, not the
+# step's own log output.
+check "every recorded global package is installed globally" bash -c '
+    set -e
+    . /usr/local/share/devbase/config.env
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_global_packages "${DEVBASE_GLOBAL_PACKAGES}" >/tmp/global.log 2>&1
+    export PNPM_HOME="${HOME}/.local/share/pnpm"
+    export PATH="${PNPM_HOME}:${PATH}"
+    installed="$(pnpm ls -g --depth 0 --json)"
+    for entry in $(printf "%s" "${DEVBASE_GLOBAL_PACKAGES}" | tr "," " "); do
+        # Strip the trailing @version; a bare @scope/name has nothing to strip.
+        name="${entry%@*}"
+        [ -n "${name}" ] || name="${entry}"
+        printf "%s" "${installed}" | jq -e --arg n "${name}" \
+            ".[0].dependencies | has(\$n)" >/dev/null
+    done'
+
+# Reaching the store is only half of it: the binaries have to land in the PNPM_HOME the
+# shipped .zshrc puts on PATH, which is the whole purpose of the global-bin-dir write. The
+# two paths are hardcoded in separate files, so this is also the check that catches them
+# drifting apart — a drift that installs everything successfully and still leaves `cz`
+# unfindable in every terminal.
+check "global binaries land in the PNPM_HOME the shell config puts on PATH" bash -c '
+    set -e
+    grep -qF "export PNPM_HOME=\"\$HOME/.local/share/pnpm\"" "${HOME}/.zshrc"
+    test -x "${HOME}/.local/share/pnpm/cz"'
+
+# The report-and-skip rule, on the one prerequisite this step has. Unreachable in a real
+# build for the same reason the pnpm branch further down is — the node dependency always
+# brings pnpm — so emptying PATH is what makes it testable, and is honest about what it
+# proves: the function needs only shell builtins to reach this branch.
+check "global packages without pnpm are reported, not fatal" bash -c '
+    set -e
+    . /usr/local/share/devbase/setup.sh
+    PATH= devbase_setup_global_packages "commitizen@latest" 2>&1 | grep -q "pnpm not available"'
+
 # The --replace-all/--add pair has to leave exactly gh's helper in the local config. The
 # function already verifies its own write, because a foreign-owned .git makes that write
 # fail silently and a swallowed failure here surfaces much later as a password prompt.

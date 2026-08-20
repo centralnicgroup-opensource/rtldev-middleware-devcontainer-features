@@ -110,8 +110,10 @@ devbase_setup_pnpm() {
 
 # devbase_setup_global_packages <comma-separated-packages>
 #
-# Installs the team's global CLI tooling (commitizen and its changelog adapter)
-# with pnpm, into a PNPM_HOME the shell config also puts on PATH.
+# Installs the team's global CLI tooling with pnpm, into a PNPM_HOME the shell config
+# also puts on PATH. The set is whatever the caller passes — the default lives in the
+# globalPackages option rather than being enumerated here, so this comment cannot drift
+# out of step with it.
 devbase_setup_global_packages() {
     local spec="${1:-}"
     [ -n "${spec}" ] || return 0

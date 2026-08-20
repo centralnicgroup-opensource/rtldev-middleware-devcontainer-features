@@ -43,6 +43,17 @@ check "timezone left untouched" bash -c \
 check "post-create succeeds with every step disabled" \
     bash -c 'cd /tmp && zsh /usr/local/bin/devbase-post-create.sh'
 
+# The other half of the global-packages coverage: post-create has just run with an empty
+# list, and nothing may have been installed. This is the scenario that can prove it —
+# pnpm is present here regardless, because the node dependency is not declinable, so the
+# empty option value is the only thing standing between this container and a global
+# install. The direct call names the behaviour; the missing binary is the effect.
+check "an empty global package list installs nothing" bash -c '
+    set -e
+    . /usr/local/share/devbase/setup.sh
+    [ -z "$(devbase_setup_global_packages "")" ]
+    ! test -e "${HOME}/.local/share/pnpm/cz"'
+
 # Every option here is empty or false, which makes this the scenario that proves the
 # escaping of the recorded values does not mangle an empty string into something
 # unparseable — post-create sources this file before it does anything else.
