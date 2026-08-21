@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.4.0...v1.5.0) (2026-08-21)
+
+
+### Features
+
+* **devbase:** give every container a UTF-8 locale ([447db08](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/447db0864a59b54077332d0c7161cca28867cd37))
+
 # [1.4.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.3.0...v1.4.0) (2026-08-21)
 
 
