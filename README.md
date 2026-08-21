@@ -134,9 +134,10 @@ and then drifted: the `log_*`/`execute_with_indent`/`setup_pnpm` block existed i
 three near-identical copies, `.zshrc` differed by 29 lines between two repositories
 for no reason anyone chose, and the attach banner had been reinvented three times.
 
-A Feature installs into a container built either way, is versioned, is pinned by digest
-in each consumer's `devcontainer-lock.json`, and is picked up by Dependabot's
-`devcontainers` ecosystem. Copied files are none of those things.
+A Feature installs into a container built either way, is versioned, and is pinned by
+digest in each consumer's `devcontainer-lock.json`. Copied files are none of those things.
+Getting a new version _into_ that lock is its own problem — see
+[Keeping consumers up to date](#keeping-consumers-up-to-date).
 
 ## Options
 
@@ -475,19 +476,41 @@ visibility_.
 
 ## Keeping consumers up to date
 
-Add the `devcontainers` ecosystem to each consuming repository's
-`.github/dependabot.yml`:
+**A consumer with no `devcontainer-lock.json` needs nothing.** Every rebuild re-resolves
+`devbase:1` to the newest `1.x`, so a release reaches them by rebuilding. That is the
+propagation story the copied-files approach never had — and for most consumers it is the
+whole story.
 
-```yaml
-- package-ecosystem: "devcontainers"
-  directory: "/"
-  schedule:
-    interval: "weekly"
-    day: "monday"
+**A consumer that commits a lock has to move the pin deliberately**, and neither of the
+two mechanisms you would expect does it for them:
+
+- `devcontainer upgrade` only fills in _missing_ entries. An entry that still satisfies
+  its reference is re-emitted unchanged, and `1.2.0` satisfies `:1` just as well as
+  `1.4.0` does, so the command is a no-op for exactly the case you want it for.
+- Dependabot's `devcontainers` ecosystem bumps **version references in
+  `devcontainer.json`**. A frame that references the moving tag `devbase:1` has no
+  reference to bump, so no PR is ever raised. This repository has that ecosystem
+  configured and has never received a devcontainers PR, while receiving them for
+  `github-actions` and `npm` — the updater works, it simply has nothing to say about `:1`.
+
+The result is a lock that silently stays put: this repository's own pinned `1.2.0` through
+four releases. To move it, drop the entry and re-resolve:
+
+```sh
+jq 'del(.features["ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:1"])' \
+  .devcontainer/devcontainer-lock.json > /tmp/lock && mv /tmp/lock .devcontainer/devcontainer-lock.json
+npx devcontainer upgrade --workspace-folder .
+npx prettier --write .devcontainer/devcontainer-lock.json
 ```
 
-Dependabot then raises the digest bump as a PR when a new `1.x` is published. That is
-the propagation story the copied-files approach never had.
+Deleting the whole lock instead re-resolves every feature, which is fine but a wider diff.
+The `prettier` line is not optional: the CLI writes the lock with no trailing newline and
+`pnpm lint` rejects it.
+
+**If you want Dependabot to do this for you, reference a precise version** —
+`devbase:1.4.0` rather than `devbase:1` — and accept a PR per release instead of a moving
+major. That is a real trade: the moving tag is what makes a patch reach every repository
+without ceremony.
 
 ## Troubleshooting
 

@@ -185,11 +185,19 @@ artifact works.
   config format breaks here first.
 - **Both `devcontainer-lock.json` files are committed**, and that is a reversal — this
   used to ship without one so each rebuild resolved the newest `1.x`. The lock pins digests
-  instead, which means a rebuild no longer picks up a fresh release on its own: Dependabot's
-  `devcontainers` ecosystem (weekly, `/`) moves the digest by PR, or `devcontainer upgrade`
-  does it by hand. The dogfooding check therefore still happens, but on Dependabot's
-  cadence and through review rather than silently at rebuild — so **do not read a green
-  rebuild as proof the newest release works.** Check which digest the lock names first.
+  instead, so a rebuild no longer picks up a fresh release on its own — and **nothing else
+  picks it up either.** `devcontainer upgrade` only fills in _missing_ entries: an entry
+  that still satisfies `:1` is re-emitted unchanged, which `1.2.0` does. Dependabot's
+  `devcontainers` ecosystem (weekly, `/`) has never opened a PR here either — it bumps
+  version references in `devcontainer.json`, and this frame references the moving tag
+  `devbase:1`, which never needs bumping. The updater itself works: it raises PRs for
+  `github-actions` and `npm`. So the lock sat at `1.2.0` across the `1.2.1`, `1.2.2`,
+  `1.3.0` and `1.4.0` releases, and the dogfooding check it was supposed to trigger did
+  not happen. Moving it means deleting the entry (or the whole file) and re-resolving, then
+  `prettier --write` on the result because the CLI writes it with no trailing newline and
+  `pnpm lint` rejects that — see the README. **Do not read a green rebuild as proof the
+  newest release works**, and do not assume anything will move the pin for you: check which
+  digest the lock names, and move it by hand when the point is to test a release.
 - **Never make this frame rely on a guarantee that has not been released yet.** Because it
   consumes the registry, the frame is only ever as correct as the _published_ Feature. The
   moment `github-cli` was dropped from the feature list here, on the strength of a
@@ -225,9 +233,11 @@ artifact works.
 - **A gate over `needs.*.result` must test each result.** `grep -vw success` over the
   joined line passes whenever _any_ job succeeded, which is the opposite of what a gate
   is for.
-- **Consumers pin `:1`** and Dependabot's `devcontainers` ecosystem moves the digest, so a
-  breaking change inside `1.x` reaches every repository automatically. Treat the major as
-  a real contract.
+- **Consumers pin `:1`**, so a breaking change inside `1.x` reaches them on their next
+  rebuild — immediately for a consumer with no `devcontainer-lock.json`, since that
+  re-resolves the newest `1.x` every time. A consumer who commits a lock stays on the
+  pinned digest until someone re-resolves it by hand, which is the opposite failure and
+  just as easy to misread (see Dogfooding). Treat the major as a real contract either way.
 
 ## Git Conventions
 
