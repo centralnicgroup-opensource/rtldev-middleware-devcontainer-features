@@ -9,6 +9,7 @@
         "zshAutosuggestions": false,
         "historyPersistence": false,
         "ghCredentialHelper": false,
+        "sshCommitSigning": false,
         "envInfoBanner": false,
         "installProjectDependencies": false,
         "autoloadEnvScript": false,

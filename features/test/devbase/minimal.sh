@@ -54,6 +54,25 @@ check "an empty global package list installs nothing" bash -c '
     [ -z "$(devbase_setup_global_packages "")" ]
     ! test -e "${HOME}/.local/share/pnpm/cz"'
 
+# The signing opt-out is asserted through post-create rather than by calling the function,
+# because what a consumer switches off is the option, not the step. A repository that signs
+# must come out of a disabled run with its own configuration untouched — including the
+# broken-looking key path, which is the developer's to fix if they chose to opt out.
+check "ssh signing opt-out recorded" \
+    grep -q 'DEVBASE_SSH_COMMIT_SIGNING="false"' /usr/local/share/devbase/config.env
+check "ssh signing is not repaired when the option is off" bash -c '
+    set -e
+    rm -rf /tmp/signoffws && mkdir -p /tmp/signoffws && cd /tmp/signoffws && git init -q .
+    git config --local commit.gpgsign true
+    git config --local gpg.format ssh
+    git config --local user.signingkey /nonexistent/.ssh/probe_key
+    ssh-keygen -q -t ed25519 -N "" -C probe_key -f /tmp/signoffws/probe_key
+    eval "$(ssh-agent -s)" >/dev/null
+    ssh-add /tmp/signoffws/probe_key 2>/dev/null
+    zsh /usr/local/bin/devbase-post-create.sh >/dev/null 2>&1
+    [ "$(git config --local --get user.signingkey)" = "/nonexistent/.ssh/probe_key" ]
+    ssh-agent -k >/dev/null'
+
 # Every option here is empty or false, which makes this the scenario that proves the
 # escaping of the recorded values does not mangle an empty string into something
 # unparseable — post-create sources this file before it does anything else.

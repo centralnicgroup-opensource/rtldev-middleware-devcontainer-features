@@ -176,6 +176,110 @@ check "gh credential helper skips outside a git tree" bash -c '
     . /usr/local/share/devbase/setup.sh
     devbase_setup_gh_credential_helper | grep -q "Not a git working tree"'
 
+# devbase_setup_ssh_commit_signing repairs the one failure a mounted host ~/.gitconfig
+# guarantees: it names a user.signingkey under the host's ~/.ssh, which the container does
+# not have, and git then refuses every commit. The whole point is that a signature comes
+# out at the end, so that is what is asserted — a rewritten config line would be exactly
+# the kind of unverified SUCCESS this suite exists to prevent.
+check "ssh signing is repaired from the forwarded agent, and a commit really signs" bash -c '
+    set -e
+    rm -rf /tmp/signws && mkdir -p /tmp/signws && cd /tmp/signws && git init -q .
+    git config --local user.email probe@example.com
+    git config --local user.name Probe
+    git config --local commit.gpgsign true
+    git config --local gpg.format ssh
+    # The exact shape of the breakage: a key path that exists on a host, not in here.
+    git config --local user.signingkey /nonexistent/.ssh/probe_key
+    ssh-keygen -q -t ed25519 -N "" -C probe_key -f /tmp/signws/probe_key
+    eval "$(ssh-agent -s)" >/dev/null
+    ssh-add /tmp/signws/probe_key 2>/dev/null
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_ssh_commit_signing >/dev/null
+    git config --local --get user.signingkey | grep -q "^key::ssh-ed25519 "
+    printf "probe\n" > file.txt && git add file.txt && git commit -q -m probe
+    git cat-file commit HEAD | grep -q "BEGIN SSH SIGNATURE"
+    # post-create runs again on every rebuild, so the inline key it just wrote has to be
+    # recognised as already-inline. Without that, the second run wraps it into
+    # key::key::ssh-ed25519 ... and signing breaks on the rebuild rather than the install.
+    before="$(git config --local --get user.signingkey)"
+    devbase_setup_ssh_commit_signing >/dev/null
+    [ "$(git config --local --get user.signingkey)" = "${before}" ]
+    ssh-agent -k >/dev/null'
+
+# No agent is the CI case and the plain-docker case, and it must stay a report: replacing
+# a configured key with nothing would turn a fixable error into a silent one.
+check "ssh signing reports a missing agent and leaves the config alone" bash -c '
+    set -e
+    rm -rf /tmp/noagentws && mkdir -p /tmp/noagentws && cd /tmp/noagentws && git init -q .
+    git config --local commit.gpgsign true
+    git config --local gpg.format ssh
+    git config --local user.signingkey /nonexistent/.ssh/probe_key
+    . /usr/local/share/devbase/setup.sh
+    ( unset SSH_AUTH_SOCK
+      devbase_setup_ssh_commit_signing 2>&1 | grep -q "No ssh-agent forwarded" )
+    [ "$(git config --local --get user.signingkey)" = "/nonexistent/.ssh/probe_key" ]'
+
+# devbase must never switch signing on for a repository that did not ask for it: that is
+# an organisational policy, not a container detail.
+check "ssh signing leaves a repository that does not sign alone" bash -c '
+    set -e
+    rm -rf /tmp/nosignws && mkdir -p /tmp/nosignws && cd /tmp/nosignws && git init -q .
+    # `git config --get` reads the global file too, and on a developer machine that file
+    # is exactly where signing is switched on. Neutralised here so this assertion tests
+    # the repository rather than the image it happens to run in.
+    export GIT_CONFIG_GLOBAL=/dev/null
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_ssh_commit_signing | grep -q "not enabled"
+    ! git config --local --get user.signingkey'
+
+# A developer whose key *is* in the container has a working arrangement, and overwriting it
+# with an agent key would be devbase breaking something that already worked.
+check "ssh signing leaves an existing key file alone" bash -c '
+    set -e
+    rm -rf /tmp/haskeyws && mkdir -p /tmp/haskeyws && cd /tmp/haskeyws && git init -q .
+    ssh-keygen -q -t ed25519 -N "" -C probe -f /tmp/haskeyws/id
+    git config --local commit.gpgsign true
+    git config --local gpg.format ssh
+    git config --local user.signingkey /tmp/haskeyws/id
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_ssh_commit_signing | grep -q "nothing to repair"
+    [ "$(git config --local --get user.signingkey)" = "/tmp/haskeyws/id" ]'
+
+# Several keys in the agent is the common case for anyone with a separate auth key, and an
+# auth key signs a commit perfectly well while GitHub still rejects the signature. Picking
+# one at random would produce exactly that, so ambiguity has to stay a skip.
+check "ssh signing skips rather than guess between several agent keys" bash -c '
+    set -e
+    rm -rf /tmp/multiws && mkdir -p /tmp/multiws && cd /tmp/multiws && git init -q .
+    ssh-keygen -q -t ed25519 -N "" -C one -f /tmp/multiws/one
+    ssh-keygen -q -t ed25519 -N "" -C two -f /tmp/multiws/two
+    eval "$(ssh-agent -s)" >/dev/null
+    ssh-add /tmp/multiws/one /tmp/multiws/two 2>/dev/null
+    git config --local commit.gpgsign true
+    git config --local gpg.format ssh
+    git config --local user.signingkey /nonexistent/.ssh/absent_key
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_ssh_commit_signing 2>&1 | grep -q "Cannot tell which of the agent"
+    ! git config --local --get user.signingkey | grep -q "^key::"
+    ssh-agent -k >/dev/null'
+
+# ...unless one of them names the configured key, which is the one hint that survives the
+# missing file and the case that makes the step useful to a developer with several keys.
+check "ssh signing picks the agent key whose comment names the configured one" bash -c '
+    set -e
+    rm -rf /tmp/matchws && mkdir -p /tmp/matchws && cd /tmp/matchws && git init -q .
+    ssh-keygen -q -t ed25519 -N "" -C unrelated -f /tmp/matchws/unrelated
+    ssh-keygen -q -t ed25519 -N "" -C signing_key -f /tmp/matchws/signing_key
+    eval "$(ssh-agent -s)" >/dev/null
+    ssh-add /tmp/matchws/unrelated /tmp/matchws/signing_key 2>/dev/null
+    git config --local commit.gpgsign true
+    git config --local gpg.format ssh
+    git config --local user.signingkey /nonexistent/.ssh/signing_key
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_ssh_commit_signing >/dev/null
+    git config --local --get user.signingkey | grep -qF "$(cut -d" " -f2 /tmp/matchws/signing_key.pub)"
+    ssh-agent -k >/dev/null'
+
 # The history symlink is the whole of historyPersistence, and it depends on a host mount
 # the consuming frame provides. Every branch matters, and they are not interchangeable: a
 # missing mount is a supported configuration and must stay a detail, an empty one is a

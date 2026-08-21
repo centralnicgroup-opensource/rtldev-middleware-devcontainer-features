@@ -37,6 +37,11 @@
       "default": true,
       "description": "Point the workspace's git credential helper at `gh auth git-credential`, replacing the system-level VS Code helper."
     },
+    "sshCommitSigning": {
+      "type": "boolean",
+      "default": true,
+      "description": "Repair SSH commit signing when the frame brings a host ~/.gitconfig whose user.signingkey names a key file the container does not have. Reads the forwarded ssh-agent and writes an inline `key::` signing key to the workspace's local git config. Never enables signing that was not already configured, and never writes to ~/.ssh or the host's gitconfig."
+    },
     "envInfoBanner": {
       "type": "boolean",
       "default": true,

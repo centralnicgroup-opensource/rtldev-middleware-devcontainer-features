@@ -269,6 +269,133 @@ devbase_setup_gh_credential_helper() {
     fi
 }
 
+# devbase_setup_ssh_commit_signing — make an already-configured SSH signing key
+# usable inside the container.
+#
+# The failure this exists for: a frame that bind-mounts the host ~/.gitconfig (the one
+# in this repository does) brings commit.gpgsign=true, gpg.format=ssh and a
+# user.signingkey naming a path under the *host's* ~/.ssh. That path does not exist in
+# the container, so every commit dies with "Couldn't load public key ...: No such file
+# or directory" — a message that names the key rather than the missing mount, which is
+# why it costs an afternoon the first time.
+#
+# The repair is deliberately not a key file. VS Code forwards the host ssh-agent, so the
+# private half is already reachable, and git takes the public half inline as
+# `key::<literal>`. Writing a file instead would mean writing into ~/.ssh, which frames
+# routinely bind-mount from the host — the same trap that keeps devbase out of ~/.claude.
+# The inline form also resolves identically on the host, which matters because the
+# .git/config it is written to lives in the bind-mounted workspace and both read it.
+devbase_setup_ssh_commit_signing() {
+    git rev-parse --git-dir >/dev/null 2>&1 || {
+        log_detail "Not a git working tree — skipping commit signing"
+        return 0
+    }
+
+    # Only ever repairs signing a repository already asked for. Turning it on for
+    # someone who never configured it would be devbase deciding a policy that belongs
+    # to the developer and their organisation.
+    [ "$(git config --get commit.gpgsign 2>/dev/null || true)" = "true" ] || {
+        log_detail "Commit signing not enabled — nothing to configure"
+        return 0
+    }
+    [ "$(git config --get gpg.format 2>/dev/null || true)" = "ssh" ] || {
+        log_detail "Commit signing is not in ssh format — leaving it alone"
+        return 0
+    }
+
+    local configured resolved
+    configured="$(git config --get user.signingkey 2>/dev/null || true)"
+    resolved="${configured}"
+    # git expands a leading ~ itself, so the check has to as well or an existing key
+    # would look missing and be replaced for no reason. Written as a prefix strip rather
+    # than a `~/*` case pattern: a quoted tilde is a shellcheck warning and an unquoted
+    # one is a pattern zsh may expand, and neither is worth the risk here.
+    if [ "${configured#\~/}" != "${configured}" ]; then
+        resolved="${HOME}/${configured#\~/}"
+    fi
+
+    # An inline key needs nothing. A key file that exists is the developer's own
+    # arrangement already working. Either way, touching it could only make it worse.
+    case "${configured}" in
+    key::*)
+        log_detail "Signing key is already an inline key"
+        return 0
+        ;;
+    esac
+    if [ -n "${resolved}" ] && [ -f "${resolved}" ]; then
+        log_detail "Signing key ${configured} is present — nothing to repair"
+        return 0
+    fi
+
+    log_info "Repairing SSH commit signing..."
+
+    if [ -z "${SSH_AUTH_SOCK:-}" ] || [ ! -S "${SSH_AUTH_SOCK}" ]; then
+        log_error "No ssh-agent forwarded — commits stay unsigned (key: ${configured:-unset})"
+        return 0
+    fi
+    command_exists ssh-add || {
+        log_error "ssh-add is missing — cannot read the forwarded agent"
+        return 0
+    }
+    command_exists ssh-keygen || {
+        log_error "ssh-keygen is missing — cannot verify the agent can sign"
+        return 0
+    }
+
+    local agent_keys count key=""
+    agent_keys="$(ssh-add -L 2>/dev/null || true)"
+    count="$(printf '%s\n' "${agent_keys}" | grep -c '^ssh-' || true)"
+
+    if [ "${count}" -eq 0 ]; then
+        log_error "The forwarded agent holds no keys — commits stay unsigned"
+        return 0
+    elif [ "${count}" -eq 1 ]; then
+        key="$(printf '%s\n' "${agent_keys}" | grep '^ssh-' | head -1 || true)"
+    elif [ -n "${configured}" ]; then
+        # Several keys, and which one GitHub accepts as a *signing* key is not knowable
+        # from inside the container — an auth key signs a commit perfectly well and the
+        # push is still rejected. The configured filename is the only hint available, so
+        # an agent key whose comment names it is the intended one, and no match is a
+        # skip rather than a guess.
+        local wanted
+        wanted="$(basename "${configured}")"
+        key="$(printf '%s\n' "${agent_keys}" | grep '^ssh-' | grep -F "${wanted}" | head -1 || true)"
+    fi
+
+    if [ -z "${key}" ]; then
+        log_error "Cannot tell which of the agent's ${count} keys signs — set user.signingkey to a key:: literal"
+        return 0
+    fi
+
+    # A real signature, not just a key that looks plausible: the agent can hold a public
+    # key whose private half it cannot use, and reporting SUCCESS for that would send the
+    # next person looking at GitHub's key settings instead of at the agent.
+    local probe
+    probe="$(mktemp -d 2>/dev/null || true)"
+    if [ -z "${probe}" ] || [ ! -d "${probe}" ]; then
+        log_error "Could not create a temporary directory — leaving signing untouched"
+        return 0
+    fi
+    printf '%s\n' "${key}" >"${probe}/key.pub"
+    printf 'devbase\n' >"${probe}/probe"
+    if ! ssh-keygen -Y sign -n git -f "${probe}/key.pub" "${probe}/probe" >/dev/null 2>&1; then
+        rm -rf "${probe}"
+        log_error "The forwarded agent cannot sign with that key — signing left unchanged"
+        return 0
+    fi
+    rm -rf "${probe}"
+
+    # --local, never --global: the global file is the host's own ~/.gitconfig on every
+    # frame that mounts it, and rewriting a host-shared file from inside a container is
+    # the one thing this Feature must not do.
+    git config --local user.signingkey "key::${key}" 2>/dev/null || true
+    if [ "$(git config --local --get user.signingkey 2>/dev/null || true)" = "key::${key}" ]; then
+        log_success "Commit signing will use the forwarded agent"
+    else
+        log_error "Could not write user.signingkey — check ownership of .git (git's safe.directory)"
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # Project dependencies
 # ---------------------------------------------------------------------------

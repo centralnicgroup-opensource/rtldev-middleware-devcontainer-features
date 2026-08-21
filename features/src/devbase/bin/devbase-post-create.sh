@@ -56,6 +56,10 @@ main() {
         devbase_setup_gh_credential_helper
     fi
 
+    if [ "${DEVBASE_SSH_COMMIT_SIGNING:-true}" = "true" ]; then
+        devbase_setup_ssh_commit_signing
+    fi
+
     if [ "${DEVBASE_INSTALL_PROJECT_DEPENDENCIES:-true}" = "true" ]; then
         devbase_setup_project_dependencies
         devbase_setup_env_file
