@@ -47,6 +47,22 @@ check "global packages recorded" \
 # --- timezone (default: Europe/Berlin) ----------------------------------------
 check "timezone applied" grep -q "Europe/Berlin" /etc/timezone
 
+# --- locale -------------------------------------------------------------------
+# The locale is the one piece of environment here that is not a shell setting: it comes
+# from the manifest's containerEnv, which the CLI turns into an ENV in the image, so every
+# process gets it — a python or node tool reading a source file with an em-dash in it
+# included, which is the failure this exists to prevent.
+#
+# Both checks assert the effect rather than the variable, because the variable can name a
+# locale the image does not have and setlocale then falls back to C in silence. The
+# character count is the sharper of the two: an em-dash is one character under a UTF-8
+# charmap and three bytes under C, and `wc -m` honours LC_CTYPE. Both were verified against
+# the unfixed state — with LANG unset the same container answers 5 and ANSI_X3.4-1968.
+check "the C library resolves a UTF-8 charmap" \
+    bash -c '[ "$(locale charmap)" = "UTF-8" ]'
+check "an em-dash counts as one character" \
+    bash -c '[ "$(printf "a—b" | wc -m)" -eq 3 ]'
+
 # --- RTK (default: installed) -------------------------------------------------
 # The binary has to be on PATH for the PreToolUse hook in the bind-mounted
 # ~/.claude/settings.json to work; without it that hook exits 127 on every Bash call.

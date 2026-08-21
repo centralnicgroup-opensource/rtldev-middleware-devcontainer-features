@@ -33,6 +33,15 @@ check "rtk not installed" bash -c '! test -e /usr/local/bin/rtk'
 check "rtk opt-out recorded" \
     grep -q 'DEVBASE_INSTALL_RTK="false"' /usr/local/share/devbase/config.env
 
+# The locale is deliberately not an option — containerEnv is static JSON with no option
+# substitution, so a flag could not switch it off and would only be a lie (the same trap
+# that keeps `mounts` unused). This scenario is where being unconditional is visible: every
+# option is off and the charmap is still UTF-8. A consumer who wants something else sets
+# LANG in their own containerEnv, which the CLI emits after the feature layer and therefore
+# wins.
+check "locale is UTF-8 with every option off" \
+    bash -c '[ "$(locale charmap)" = "UTF-8" ]'
+
 # An empty timezone means "leave the image alone", so nothing was written. No
 # `|| true` here: with it, this check could never fail, and it duly reported
 # SUCCESS while install.sh was writing Europe/Berlin anyway.

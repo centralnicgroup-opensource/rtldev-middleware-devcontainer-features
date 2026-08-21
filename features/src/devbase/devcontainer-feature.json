@@ -68,6 +68,9 @@
       "description": "RTK release to install, without the leading 'v'. Pinned rather than tracking latest, and the download is checksum-verified against the release's checksums.txt."
     }
   },
+  "containerEnv": {
+    "LANG": "C.UTF-8"
+  },
   "customizations": {
     "vscode": {
       "extensions": [

@@ -1,3 +1,37 @@
+## The container locale
+
+This Feature sets `LANG=C.UTF-8` for the whole container, via `containerEnv` in its
+manifest. The devcontainer CLI turns that into an `ENV` in the built image, so it reaches
+every process — not just interactive shells.
+
+It is here rather than in each repository's `Dockerfile` because the problem is not
+repository-specific. Our base images ship no `LANG` at all, which leaves the C library in
+the `C` locale with an **ASCII** charmap, and every tool that reads a source file inherits
+it. Any file with an em-dash in a comment — which is most of ours — then decodes wrong, in
+whichever tool notices first. A per-repository `containerEnv` fixes one repository at a
+time; this fixes the ones that have not hit it yet.
+
+`C.UTF-8` rather than `en_US.UTF-8` on purpose:
+
+- it is built into glibc, so no `locales` package and no `locale-gen` at build time, and
+  it works on a minimal base image
+- its collation is codepoint order, the same as `C` — so `sort`, `[a-z]` ranges and
+  anything else a shell script relies on behave exactly as they did before. Only the
+  charmap changes.
+
+**No option switches it off**, deliberately. `containerEnv` is static JSON with no option
+substitution — the same property that keeps `mounts` unused here — so a flag could not
+actually control it and would only be a lie. Override it in your own `devcontainer.json`
+instead; the CLI emits the consumer's `containerEnv` after the feature layer, so yours
+wins:
+
+```jsonc
+"containerEnv": { "LANG": "en_GB.UTF-8" }
+```
+
+Do check the locale exists in your image before naming a generated one. `setlocale` falls
+back to `C` in silence when it does not, which looks exactly like the bug this fixes.
+
 ## Overriding the VS Code settings
 
 This Feature also contributes `customizations.vscode.settings` (shellcheck, the zsh

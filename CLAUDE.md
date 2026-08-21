@@ -63,6 +63,16 @@ environment.
   from the base image's `devcontainer.metadata` label, authored from that image's own
   devcontainer.json; no Feature can set it, `common-utils` included — it creates the user,
   it does not declare `remoteUser`.
+- **`containerEnv` is the one exception to that allow-list, because it is not routed
+  through metadata at all.** It is absent from the list above, yet honoured: the CLI emits
+  each Feature's `containerEnv` as `ENV KEY="value"` lines in the generated Dockerfile,
+  ahead of that Feature's install layer, so it lands in the image rather than in
+  `devcontainer.metadata`. That is what makes it reach non-interactive processes and
+  lifecycle commands, which a `/etc/profile.d` snippet does not — it carries
+  `LANG=C.UTF-8`. Two consequences: the consumer's own `containerEnv` is emitted **after**
+  every feature layer and therefore wins, which is the only opt-out; and the values are
+  static JSON with no option substitution, exactly the `mounts` trap, so an option could
+  never switch one off. Do not add a flag that pretends otherwise.
 - **An object-valued VS Code setting is replaced by the consumer, not deep-merged, so add
   keys to the existing object.** `customizations.vscode.settings` currently ships one:
   `files.exclude`. A consumer declaring their own `files.exclude` replaces the whole

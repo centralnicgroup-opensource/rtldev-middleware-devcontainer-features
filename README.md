@@ -90,6 +90,7 @@ What it does, on first create and on every attach:
 - **Persistent shell history** across container rebuilds
 - **Dependency installation** — `composer.json` via composer, `package.json` via pnpm,
   `.env` seeded from `.env.example`
+- **A UTF-8 locale** (`LANG=C.UTF-8`) for the whole container, not just interactive shells
 - **An attach banner** reporting the container, language and dependency versions
 - The shared **VS Code extension set**, the zsh terminal profile and a few editor
   settings — shellcheck, `npm.packageManager`, and `files.exclude` hiding
@@ -120,6 +121,24 @@ What it does, on first create and on every attach:
 >
 > Which also means there is no separate opt-out to build: `"**/node_modules": false`
 > un-hides it, and so does simply leaving the key out of your own object.
+
+> **On the locale.** Our base images ship no `LANG`, which leaves the C library in the `C`
+> locale with an **ASCII** charmap — inherited by every tool that reads a file, so any
+> source file with an em-dash in a comment decodes wrong somewhere. The Feature declares
+> `containerEnv: { "LANG": "C.UTF-8" }`, which the CLI bakes into the image as an `ENV`, so
+> it reaches non-interactive processes and lifecycle commands too — a `/etc/profile.d`
+> snippet would not.
+>
+> `C.UTF-8` is built into glibc (no `locales` package, no `locale-gen`) and collates by
+> codepoint exactly as `C` does, so `sort` and `[a-z]` ranges in existing scripts are
+> unaffected. Only the charmap changes.
+>
+> There is no option for it, on the same reasoning that keeps `mounts` unused: `containerEnv`
+> is static JSON with no option substitution, so a flag could not switch it off and would
+> only be a lie. Set `containerEnv.LANG` in your own `devcontainer.json` to override — the
+> CLI emits the consumer's `containerEnv` after the feature layer, so it wins — and make
+> sure the locale you name exists in the image, because `setlocale` falls back to `C` in
+> silence when it does not.
 
 ## Why a Feature and not copied files
 
