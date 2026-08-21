@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.3.0...v1.4.0) (2026-08-21)
+
+
+### Features
+
+* **devbase:** repair SSH commit signing from the forwarded agent ([ceb948a](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/ceb948a2e5e304339c7fe169483fc191e18979c0))
+
 # [1.3.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.2.2...v1.3.0) (2026-08-19)
 
 

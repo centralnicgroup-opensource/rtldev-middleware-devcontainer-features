@@ -1,6 +1,6 @@
 {
   "id": "devbase",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "name": "RTLDEV Middleware dev base",
   "description": "Shared devcontainer behaviour for RTLDEV middleware repositories: zsh with the team prompt, commitizen, pnpm, the gh credential helper, persistent shell history and an on-attach toolchain banner. Pulls in Node LTS (which also provides pnpm), the GitHub CLI and Claude Code as dependencies; other language toolchains stay in the consuming repository's own feature list.",
   "documentationURL": "https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features#the-devbase-feature",
