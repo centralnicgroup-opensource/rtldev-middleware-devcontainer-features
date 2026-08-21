@@ -24,7 +24,13 @@
   // whether a file was meant. Without the `touch`, a host with no ~/.gitconfig gets a
   // directory at /home/vscode/.gitconfig and every git command fails on a path that
   // looks right — a symptom that points at git rather than at this line.
-  "initializeCommand": "touch ${localEnv:HOME}/.gitconfig",
+  //
+  // ~/.claude is a directory either way, so its `mkdir` is about ownership rather than
+  // shape: the one Docker creates is owned by root, and claude-code — which devbase
+  // pulls in via `dependsOn` — then cannot write its own config in the container. It has
+  // to stay in step with the .claude mount below; dropping it while the mount remained
+  // is exactly what the .ssh cleanup did.
+  "initializeCommand": "mkdir -p ${localEnv:HOME}/.claude && touch ${localEnv:HOME}/.gitconfig",
 
   "features": {
     // `devcontainer features test` builds real containers, so this environment needs
