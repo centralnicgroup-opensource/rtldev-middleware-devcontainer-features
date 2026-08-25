@@ -20,7 +20,6 @@
   ],
   "homepage": "https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features",
   "repository": "github:centralnicgroup-opensource/rtldev-middleware-devcontainer-features.git",
-  "bugs": "https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/issues",
   "keywords": [
     "devcontainer",
     "devcontainer-features",
