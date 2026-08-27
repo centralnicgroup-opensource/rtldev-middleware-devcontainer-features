@@ -22,11 +22,12 @@ concurrency:
 # Release and publish are one job on purpose.
 #
 # semantic-release bumps `version` in devcontainer-feature.json (via the replace plugin)
-# and commits it with @semantic-release/git. That commit is pushed with GITHUB_TOKEN, and
-# pushes made with GITHUB_TOKEN do not trigger workflows — so a separate publish workflow
-# listening on `push` would never fire for exactly the commit that matters. Publishing in
-# the same job, after semantic-release has run, is what makes the bumped version the one
-# that reaches ghcr.io.
+# and commits it with @semantic-release/git. That commit is pushed over SSH with the
+# release deploy key, and a push made with a deploy key triggers workflows no more than
+# the GITHUB_TOKEN push it replaced did — so a separate publish workflow listening on
+# `push` would never fire for exactly the commit that matters. Publishing in the same
+# job, after semantic-release has run, is what makes the bumped version the one that
+# reaches ghcr.io.
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -41,7 +42,10 @@ jobs:
         with:
           # semantic-release reads the full history to work out the next version.
           fetch-depth: 0
-          persist-credentials: true
+          # No persisted HTTPS credential: both pushes in this job go over SSH with the
+          # release deploy key, so a stored token would be dead weight that reads like
+          # the identity actually doing the pushing.
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:
@@ -64,6 +68,34 @@ jobs:
       # release aborted on its first step and the first release could never be cut. It
       # fails safe — before any tag, commit or publish — which is also why it would have
       # looked like an unrelated release failure rather than a missing secret.
+      # This repository pushes to the default branch twice: the release commit below and
+      # the regenerated feature documentation at the end of the job. The ruleset protecting
+      # that branch names DeployKey as its only bypass actor, so both pushes have to be the
+      # deploy key — hence the origin rewrite as well as the key on disk. The alternative,
+      # adding the Actions integration as a second bypass actor, would hand the bypass to
+      # every workflow in the repository holding contents: write.
+      #
+      # The key goes through env, not through ${{ }} interpolated into the script body:
+      # a multi-line value breaks there, and the body is a shell injection surface.
+      #
+      # Fails on an empty secret rather than letting it through. semantic-release falls
+      # back to HTTPS when SSH auth fails and does not re-verify, so an unset secret would
+      # surface as a rejected push at the very end of the release, after the version has
+      # already been chosen and the tag written.
+      - name: Configure SSH for the release push
+        env:
+          SSH_KEY: ${{ secrets.RTLDEV_MW_CI_SSH_KEY }}
+        run: |
+          if [ -z "$SSH_KEY" ]; then
+            echo "::error::RTLDEV_MW_CI_SSH_KEY is not set — the release push has no identity"
+            exit 1
+          fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
+          git remote set-url origin git@github.com:centralnicgroup-opensource/rtldev-middleware-devcontainer-features.git
+
       - name: Semantic release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

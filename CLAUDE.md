@@ -220,9 +220,15 @@ artifact works.
 ## Build, CI & Policies
 
 - **Releases are semantic-release, driven by commit type**, and the release workflow
-  publishes in the same run. It has to: semantic-release commits the version bump with
-  `GITHUB_TOKEN`, and pushes made with that token do not trigger workflows, so a separate
-  publish workflow on `push` would never fire for the one commit that matters.
+  publishes in the same run. It has to: semantic-release commits the version bump and
+  pushes it over SSH with the release deploy key, and a deploy-key push triggers
+  workflows no more than the `GITHUB_TOKEN` push it replaced did, so a separate publish
+  workflow on `push` would never fire for the one commit that matters.
+- **Both pushes to `main` in the release job go over the deploy key** — the release
+  commit and the regenerated feature documentation. The default-branch ruleset names
+  `DeployKey` as its only bypass actor, so the job rewrites `origin` to the `git@` form
+  and checks out with `persist-credentials: false`. Never reintroduce an HTTPS push
+  here: it has no bypass and would be rejected. (RSRMID-2994)
 - **The commit type is the release decision.** `fix(devbase)` is a patch,
   `feat(devbase)` a minor, either plus `BREAKING CHANGE:` a major; `ci`/`docs`/`chore`/
   `test`/`refactor` publish nothing. Consumers pin `:1`, so a patch or minor reaches every

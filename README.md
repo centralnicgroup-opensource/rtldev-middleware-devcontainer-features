@@ -479,9 +479,19 @@ commits, writes it into the Feature metadata, commits and tags it, and publishes
 | `ci` / `docs` / `chore` / `test` / …    | nothing published                                     |
 
 Release and publish are deliberately one job: semantic-release commits the version bump
-using `GITHUB_TOKEN`, and pushes made with that token do not trigger workflows — so a
-separate publish workflow listening on `push` would never fire for exactly the commit
-that matters.
+and pushes it over SSH with the release deploy key, and a deploy-key push triggers
+workflows no more than the `GITHUB_TOKEN` push it replaced did — so a separate publish
+workflow listening on `push` would never fire for exactly the commit that matters.
+
+That deploy key is also why the job rewrites `origin` to the `git@` form before
+semantic-release runs. The default branch is protected by a ruleset whose only bypass
+actor is `DeployKey`, and this job pushes to it twice — the release commit, and the
+regenerated feature documentation at the end. Both have to be the key; an HTTPS push
+with `GITHUB_TOKEN` has no bypass and would be rejected. The private half lives in the
+repository secret `RTLDEV_MW_CI_SSH_KEY`, and the public half is the repository's single
+write-enabled deploy key, titled `semantic-release`. A deploy key reaches exactly one
+repository, which is the point: a leak costs this repository rather than everything a
+personal access token can reach.
 
 Publishing is idempotent (a version already in the registry is skipped, not overwritten),
 which is why the publish step needs no guard, and why
