@@ -38,7 +38,7 @@ jobs:
       packages: write # pushes the Feature artifacts to ghcr.io
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # semantic-release reads the full history to work out the next version.
           fetch-depth: 0
@@ -47,7 +47,7 @@ jobs:
           # the identity actually doing the pushing.
           persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: lts/*
 

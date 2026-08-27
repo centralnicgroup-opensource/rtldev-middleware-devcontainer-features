@@ -34,7 +34,7 @@ jobs:
       contents: write # generate-docs commits the per-feature README.md
       packages: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
 
