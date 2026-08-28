@@ -114,17 +114,31 @@ devbase_setup_npm_floor() {
     fi
 }
 
-# _devbase_declared_pnpm — echo the exact pnpm version the workspace declares.
+# _devbase_declared_pnpm — echo the pnpm version *spec* the workspace declares.
 #
-# The declaration is package.json's `packageManager` field, which is also what CI reads
-# (pnpm/action-setup) — one field, so the container and the pipeline cannot disagree.
-# Nothing else is accepted:
+# Two fields, read in the same order pnpm/action-setup reads them: `devEngines.
+# packageManager` first, `packageManager` second. That order is not a preference, it is
+# the pipeline's — CI resolves its pnpm from whichever of the two it finds first, so
+# reading them differently here would reintroduce the container/CI split this exists to
+# close. In practice only one is ever present: the toolchain policy declares
+# `devEngines.packageManager` and forbids `packageManager`, so precedence decides nothing
+# but the window in which a repository carries both.
 #
-#   * a `packageManager` naming npm or yarn is a repository that made no statement about
-#     pnpm, and inventing one from it would be devbase choosing rather than reading;
-#   * a range is invalid in this field by specification, and honouring one anyway would
-#     resolve to a different version on different days — the exact drift this reads it to
-#     remove. Both come back empty, and the caller reports them together.
+# The two fields are not read alike, because they do not mean alike:
+#
+#   * `devEngines.packageManager` is an object, not a string — `{"name": "pnpm",
+#     "version": "^11.0.0", "onFail": "error"}` — and the specification permits an array
+#     of them. So it is flattened and filtered on `.name`: an entry naming npm or yarn
+#     said nothing about pnpm, and inventing a pnpm from it would be devbase choosing
+#     rather than reading. A range here is the declaration's normal shape and is handed
+#     to npm as-is, which resolves it to the newest match exactly as action-setup does.
+#   * `packageManager` is an exact `pnpm@X.Y.Z` by specification, so exact is all that is
+#     accepted on that path. A range there is a malformed field, and honouring one would
+#     be guessing at what a repository failed to say.
+#
+# Whatever comes back ends up inside a command string that execute_with_indent evals, so
+# the spec is restricted to the characters a semver range is made of. That is a real
+# guard rather than a tidy one: `>=` in an unquoted position is a redirection.
 #
 # Pure on purpose — it echoes and never logs, so it stays callable from a test.
 _devbase_declared_pnpm() {
@@ -132,6 +146,17 @@ _devbase_declared_pnpm() {
     command_exists jq || return 0
 
     local declared
+    declared="$(jq -r '[.devEngines.packageManager] | flatten
+        | map(select(type == "object" and .name == "pnpm"))
+        | .[0].version // empty' package.json 2>/dev/null)" || return 0
+    if [ -n "${declared}" ]; then
+        case "${declared}" in
+            *[!0-9.'^~<>=']*) return 0 ;;
+            *) printf '%s' "${declared}" ;;
+        esac
+        return 0
+    fi
+
     declared="$(jq -r '.packageManager // empty' package.json 2>/dev/null)" || return 0
     case "${declared}" in
         pnpm@*) declared="${declared#pnpm@}" ;;
@@ -142,6 +167,47 @@ _devbase_declared_pnpm() {
     case "${declared}" in
         [0-9]*.[0-9]*.[0-9]*) printf '%s' "${declared}" ;;
         *) return 0 ;;
+    esac
+}
+
+# _devbase_pnpm_satisfies <version> <spec> — does an installed pnpm match the declaration?
+#
+# Deliberately partial, and partial in one direction only: it answers yes for the range
+# forms it fully understands and no for everything else, so an unfamiliar spec falls
+# through to a reinstall and — if that does not settle it — a mismatch report. The
+# opposite bias would print SUCCESS over a version nothing checked.
+#
+# No semver library exists at create time, and none is needed for what has to hold here:
+# a caret range pins the major, which is the whole of the question when `^11.0.0` meets a
+# container whose image shipped pnpm 12.
+_devbase_pnpm_satisfies() {
+    local version="$1" spec="$2"
+    [ -n "${version}" ] || return 1
+    case "${spec}" in
+        '^'*)
+            spec="${spec#^}"
+            # `^0.x.y` pins the minor rather than the major. pnpm has no 0.x release, so
+            # that shape is left unhandled rather than modelled — unhandled meaning "not
+            # satisfied", which is the safe answer.
+            [ "${spec%%.*}" != "0" ] &&
+                [ "${version%%.*}" = "${spec%%.*}" ] &&
+                ! _devbase_version_lt "${version}" "${spec}"
+            ;;
+        '~'*)
+            spec="${spec#\~}"
+            [ "${version%.*}" = "${spec%.*}" ] &&
+                ! _devbase_version_lt "${version}" "${spec}"
+            ;;
+        '>='*)
+            # A compound range carries its floor first; the rest is a ceiling this has no
+            # opinion about, the same reading devbase_setup_npm_floor takes.
+            spec="${spec#>=}"
+            ! _devbase_version_lt "${version}" "${spec%% *}"
+            ;;
+        [0-9]*)
+            [ "${version}" = "${spec}" ]
+            ;;
+        *) return 1 ;;
     esac
 }
 
@@ -170,13 +236,18 @@ _devbase_pnpm_version() {
 #
 # The Node dependency ships `pnpmVersion: latest`, so a container already has *a* pnpm —
 # whichever was newest on the day the image was built. That is an environment accident,
-# and it is the container half of the toolchain drift the repositories' `packageManager`
-# field exists to close: CI honours the declaration, so a container that ignores it runs
-# a different pnpm than the pipeline that reviews its lockfile.
+# and it is the container half of the toolchain drift the repositories' pnpm declaration
+# exists to close: CI honours that declaration, so a container that ignores it runs a
+# different pnpm than the pipeline that reviews its lockfile.
 #
 # So this aligns rather than installs: the declared version when there is one, whatever is
 # already present when there is not, and `latest` only for the container that arrived with
 # no pnpm at all.
+#
+# A range agrees on less than a pin did, and on purpose. `^11.0.0` puts the container and
+# CI inside the same range rather than on an identical version — each resolves the newest
+# match on the day it installs. That is the toolchain policy's accepted trade for dropping
+# the version-bump treadmill, not something for this step to tighten back up.
 #
 # npm stays the installation route, deliberately. corepack is not the alternative — Node
 # stopped bundling it at v25, and our engines policy spans ^24.15.0 || ^26.0.0, so it is
@@ -201,8 +272,8 @@ devbase_setup_pnpm() {
             return 0
         fi
         declared="latest"
-    elif [ "${declared}" = "${current}" ]; then
-        log_detail "pnpm ${current} already matches the declared packageManager"
+    elif _devbase_pnpm_satisfies "${current}" "${declared}"; then
+        log_detail "pnpm ${current} already satisfies the declared ${declared}"
         return 0
     fi
 
@@ -212,9 +283,13 @@ devbase_setup_pnpm() {
     fi
 
     log_info "Installing pnpm@${declared}..."
-    if ! execute_with_indent "npm i --silent -g pnpm@${declared}" \
+    # Single-quoted inside the command string, because execute_with_indent evals it and a
+    # `>=` range would otherwise be read as a redirection rather than a version. The spec
+    # has already been reduced to semver-range characters, so there is nothing here that
+    # could quote its way back out.
+    if ! execute_with_indent "npm i --silent -g 'pnpm@${declared}'" \
         "Installing pnpm@${declared} globally"; then
-        if ! command_exists sudo || ! execute_with_indent "sudo npm i --silent -g pnpm@${declared}" \
+        if ! command_exists sudo || ! execute_with_indent "sudo npm i --silent -g 'pnpm@${declared}'" \
             "Installing pnpm@${declared} globally (with sudo)"; then
             log_error "Failed to install pnpm@${declared} — continuing with pnpm ${current:-none}"
             return 0
@@ -224,11 +299,16 @@ devbase_setup_pnpm() {
     # Ask PATH, not the exit code. An install that succeeds while a different pnpm keeps
     # winning on PATH leaves the container running the version this step was meant to
     # replace, and a SUCCESS line over that is worse than the mismatch.
+    #
+    # Against a range the question is membership, not equality — npm picked the version,
+    # and which one it picked is the container's business rather than the declaration's.
+    # The probe is still taken from `/` and the line still names the version that actually
+    # resulted, so SUCCESS stays a thing that was checked.
     hash -r 2>/dev/null || true
     current="$(_devbase_pnpm_version)"
     if [ -z "${current}" ]; then
         log_error "pnpm is still not on PATH after installing pnpm@${declared}"
-    elif [ "${declared}" != "latest" ] && [ "${current}" != "${declared}" ]; then
+    elif [ "${declared}" != "latest" ] && ! _devbase_pnpm_satisfies "${current}" "${declared}"; then
         log_error "pnpm ${current} is on PATH, but package.json asks for ${declared}"
     else
         log_success "pnpm ${current} installed"

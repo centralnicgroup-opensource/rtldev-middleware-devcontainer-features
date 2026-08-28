@@ -33,6 +33,13 @@
     "node": ">=24.15.0",
     "npm": ">=12.0.0"
   },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.0.0",
+      "onFail": "error"
+    }
+  },
   "scripts": {
     "prepare": "husky",
     "features:test": "devcontainer features test --features devbase --base-image mcr.microsoft.com/devcontainers/base:2-ubuntu-24.04 ./features",

@@ -1,30 +1,45 @@
 ## The pnpm version
 
-The container installs the pnpm your `package.json` declares:
+The container installs the pnpm your `package.json` declares — either field:
+
+```jsonc
+"devEngines": {
+  "packageManager": { "name": "pnpm", "version": "^11.0.0", "onFail": "error" }
+}
+```
 
 ```jsonc
 "packageManager": "pnpm@11.24.0"
 ```
 
-It is the same field CI reads (`pnpm/action-setup`), and that is the whole point. Before
-this, the Node dependency's `pnpmVersion: latest` decided it — so a container ran whichever
-pnpm was newest on the day its image was built, while the pipeline reviewing its lockfile
-ran the declared one. Nothing announced the difference; a lockfile written by one and
-rejected by the other is how you found out.
+These are the same two fields CI reads (`pnpm/action-setup`), read in the same order —
+`devEngines.packageManager` first — and that is the whole point. Before this, the Node
+dependency's `pnpmVersion: latest` decided it, so a container ran whichever pnpm was newest
+on the day its image was built while the pipeline reviewing its lockfile ran the declared
+one. Nothing announced the difference; a lockfile written by one and rejected by the other
+is how you found out.
 
-What counts as a declaration is narrow on purpose:
+What counts as a declaration is narrow on purpose, and differs by field because the fields
+differ:
 
-- an exact `pnpm@X.Y.Z`, optionally with the `+sha512-...` integrity suffix, which is
-  stripped before npm sees it
-- **not** a range. `packageManager` forbids one by specification, and honouring one anyway
-  would resolve to a different version on different days — the drift this reads the field
-  to remove
-- **not** a `packageManager` naming npm or yarn. That repository said nothing about pnpm,
-  and inventing an answer from it would be the Feature choosing rather than reading
+- in `devEngines.packageManager`, a semver range such as `^11.0.0` — its normal shape. It
+  is handed to npm, which resolves it to the newest matching release, exactly as
+  `action-setup` does. An exact version there works too.
+- in `packageManager`, an exact `pnpm@X.Y.Z` only, optionally with the `+sha512-...`
+  integrity suffix, which is stripped before npm sees it. A range in **that** field is
+  forbidden by specification, so honouring one would be guessing at what the repository
+  failed to say.
+- **not** an entry naming npm or yarn, in either field. That repository said nothing about
+  pnpm, and inventing an answer from it would be the Feature choosing rather than reading.
+
+A range agrees on less than a pin, and that is the trade it makes: your container and your
+CI end up **inside the same range** rather than on an identical version, each resolving the
+newest match on the day it installs. In exchange, neither has to be bumped when a patch
+release lands. A container already inside the range is left alone rather than reinstalled.
 
 Declare nothing and the pnpm already in the container stays put, untouched — `latest` is
-installed only for a container that arrived with no pnpm at all. So adopting the field is
-opt-in per repository, and a repository that has not yet adopted it sees no change.
+installed only for a container that arrived with no pnpm at all. So adopting either field is
+opt-in per repository, and a repository that has not yet adopted one sees no change.
 
 **No option switches this off.** One would only give a repository a second place to say
 which pnpm it wants, and the container-versus-CI disagreement back again. To choose a

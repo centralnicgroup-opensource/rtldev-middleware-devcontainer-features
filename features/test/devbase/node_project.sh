@@ -115,6 +115,7 @@ check "a workspace with no usable declaration keeps its pnpm" bash -c '
     rm -rf /tmp/unusable && mkdir -p /tmp/unusable && cd /tmp/unusable
     for manifest in "{\"packageManager\":\"yarn@4.9.2\"}" \
         "{\"packageManager\":\"pnpm@^10.18.0\"}" \
+        "{\"devEngines\":{\"packageManager\":{\"name\":\"yarn\",\"version\":\"^4.9.2\"}}}" \
         "{\"name\":\"probe\"}"; do
         printf "%s\n" "${manifest}" > package.json
         devbase_setup_pnpm > /tmp/unusable.log 2>&1
@@ -126,6 +127,53 @@ check "a workspace with no usable declaration keeps its pnpm" bash -c '
             exit 1
         }
     done'
+
+# The field the toolchain policy actually declares, asserted on the binary rather than on
+# the read. Both checks below run with the container sitting on 10.18.0 from the first
+# check in this section, so a step that quietly does nothing cannot pass either.
+check "pnpm is aligned to the range devEngines.packageManager declares" bash -c '
+    set -e
+    export PNPM_HOME="${HOME}/.local/share/pnpm"
+    export PATH="${PNPM_HOME}:${PATH}"
+    rm -rf /tmp/deveng && mkdir -p /tmp/deveng && cd /tmp/deveng
+    printf "{\"name\":\"probe\",\"private\":true,\"devEngines\":{\"packageManager\":{\"name\":\"pnpm\",\"version\":\"^11.0.0\",\"onFail\":\"error\"}}}\n" > package.json
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_pnpm > /tmp/deveng.log 2>&1
+    hash -r
+    # From /, never the workspace: pnpm reads this same field and re-execs the version it
+    # names, so a reading taken here would report the range as satisfied whether or not
+    # anything was installed.
+    installed="$(cd / && pnpm --version)"
+    test "${installed%%.*}" = "11" || { cat /tmp/deveng.log; echo "installed ${installed}"; exit 1; }'
+
+# The range has to steer the resolution, not merely permit it. `^11.0.0` cannot show that
+# on its own — pnpm latest is inside it, so a step that ignored the field and installed
+# latest would pass the check above. A 10.34 range cannot be reached by latest, so this is
+# the one that separates "read the declaration" from "installed whatever was newest".
+check "the resolved pnpm comes from the declared range, not from latest" bash -c '
+    set -e
+    export PNPM_HOME="${HOME}/.local/share/pnpm"
+    export PATH="${PNPM_HOME}:${PATH}"
+    rm -rf /tmp/devengold && mkdir -p /tmp/devengold && cd /tmp/devengold
+    printf "{\"name\":\"probe\",\"private\":true,\"devEngines\":{\"packageManager\":{\"name\":\"pnpm\",\"version\":\"~10.34.0\"}}}\n" > package.json
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_pnpm > /tmp/devengold.log 2>&1
+    hash -r
+    installed="$(cd / && pnpm --version)"
+    case "${installed}" in
+        10.34.*) ;;
+        *) cat /tmp/devengold.log; echo "installed ${installed}"; exit 1 ;;
+    esac
+    # And a second create with the same declaration leaves it alone: the version is inside
+    # the range, so there is nothing to align and no reason to reach the network again.
+    devbase_setup_pnpm > /tmp/devengold2.log 2>&1
+    hash -r
+    again="$(cd / && pnpm --version)"
+    test "${again}" = "${installed}" || {
+        cat /tmp/devengold2.log
+        echo "second run moved pnpm from ${installed} to ${again}"
+        exit 1
+    }'
 
 # --- the npm floor ------------------------------------------------------------
 # The floor is the Feature's other npm invocation, and it had no test at all until now.

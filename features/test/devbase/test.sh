@@ -95,10 +95,11 @@ check "setup helpers load" bash -c '. /usr/local/share/devbase/setup.sh; \
 # enumerated in one place. The installing half is asserted on the real binary in the
 # node_project scenario.
 #
-# Only an exact `pnpm@X.Y.Z` is a declaration devbase acts on. A range is invalid in this
-# field by specification and would resolve differently on different days — which is the
-# drift the field is read to remove — and a `packageManager` naming another tool said
-# nothing about pnpm at all. Both must come back empty rather than nearly-right.
+# Two fields, and they are not read alike. `devEngines.packageManager` is the shape the
+# toolchain policy declares — an object carrying a semver range — and a range there is
+# the normal case, passed through for npm to resolve. `packageManager` is an exact
+# `pnpm@X.Y.Z` by specification, so a range there is a malformed field and stays
+# unreadable. Getting that backwards in either direction is what this pins down.
 check "the declared pnpm version is read from packageManager" bash -c '
     set -e
     . /usr/local/share/devbase/setup.sh
@@ -111,13 +112,42 @@ check "the declared pnpm version is read from packageManager" bash -c '
     printf "{\"packageManager\":\"pnpm@11.24.0+sha512-abc\"}\n" > package.json
     test "$(_devbase_declared_pnpm)" = "11.24.0"'
 
-check "a packageManager devbase cannot act on reads as no declaration" bash -c '
+# The field the migration moves to. A range is what it carries, so a range is what comes
+# back — this is the check that fails against a devbase reading only `packageManager`,
+# which is exactly the state that reopened the drift once a repository migrated.
+check "the declared pnpm version is read from devEngines.packageManager" bash -c '
+    set -e
+    . /usr/local/share/devbase/setup.sh
+    rm -rf /tmp/decleng && mkdir -p /tmp/decleng && cd /tmp/decleng
+
+    printf "{\"devEngines\":{\"packageManager\":{\"name\":\"pnpm\",\"version\":\"^11.0.0\",\"onFail\":\"error\"}}}\n" > package.json
+    test "$(_devbase_declared_pnpm)" = "^11.0.0"
+
+    # An exact version in the same field is a declaration too, not only a range.
+    printf "{\"devEngines\":{\"packageManager\":{\"name\":\"pnpm\",\"version\":\"11.24.0\"}}}\n" > package.json
+    test "$(_devbase_declared_pnpm)" = "11.24.0"
+
+    # The specification permits an array of engines; the pnpm entry is the one that counts,
+    # and it is not required to be first.
+    printf "{\"devEngines\":{\"packageManager\":[{\"name\":\"npm\",\"version\":\"^12.0.0\"},{\"name\":\"pnpm\",\"version\":\"^11.0.0\"}]}}\n" > package.json
+    test "$(_devbase_declared_pnpm)" = "^11.0.0"
+
+    # devEngines wins when both are present, matching pnpm/action-setup — so the container
+    # and the pipeline resolve from the same field during a repository'"'"'s migration window.
+    printf "{\"packageManager\":\"pnpm@10.18.0\",\"devEngines\":{\"packageManager\":{\"name\":\"pnpm\",\"version\":\"^11.0.0\"}}}\n" > package.json
+    test "$(_devbase_declared_pnpm)" = "^11.0.0"'
+
+check "a declaration devbase cannot act on reads as no declaration" bash -c '
     set -e
     . /usr/local/share/devbase/setup.sh
     rm -rf /tmp/nodecl && mkdir -p /tmp/nodecl && cd /tmp/nodecl
     for manifest in "{\"packageManager\":\"pnpm@^11.24.0\"}" \
         "{\"packageManager\":\"yarn@4.9.2\"}" \
         "{\"packageManager\":\"npm@12.0.0\"}" \
+        "{\"devEngines\":{\"packageManager\":{\"name\":\"yarn\",\"version\":\"^4.9.2\"}}}" \
+        "{\"devEngines\":{\"packageManager\":{\"name\":\"pnpm\"}}}" \
+        "{\"devEngines\":{\"packageManager\":\"pnpm@11.24.0\"}}" \
+        "{\"devEngines\":{\"runtime\":{\"name\":\"node\",\"version\":\"^24.15.0\"}}}" \
         "{\"name\":\"probe\"}" \
         "not json at all"; do
         printf "%s\n" "${manifest}" > package.json
@@ -126,6 +156,58 @@ check "a packageManager devbase cannot act on reads as no declaration" bash -c '
     # A workspace with no manifest at all is the same answer, not an error.
     rm -f package.json
     test -z "$(_devbase_declared_pnpm)"'
+
+# The spec is interpolated into a command string that execute_with_indent evals, so a
+# version field is shell input. Nothing outside the characters a semver range is made of
+# survives the read — including the space a compound range would need, which is why
+# ">=11.0.0 <12.0.0" is unreadable rather than dangerous.
+check "a devEngines version carrying shell metacharacters reads as no declaration" bash -c '
+    set -e
+    . /usr/local/share/devbase/setup.sh
+    rm -rf /tmp/evil && mkdir -p /tmp/evil && cd /tmp/evil
+    for version in "11.24.0; touch /tmp/evil/pwned" \
+        "\$(touch /tmp/evil/pwned)" \
+        "11.24.0 || touch /tmp/evil/pwned" \
+        ">=11.0.0 <12.0.0" \
+        "latest" \
+        "*"; do
+        printf "{\"devEngines\":{\"packageManager\":{\"name\":\"pnpm\",\"version\":\"%s\"}}}\n" "${version}" > package.json
+        test -z "$(_devbase_declared_pnpm)"
+    done
+    test ! -e /tmp/evil/pwned'
+
+# Membership, not equality — the check the SUCCESS line rests on once the declaration is a
+# range. The rejections matter more than the acceptances: an over-eager "satisfied" is a
+# container that skips the install and keeps a pnpm outside the range, which is the
+# failure this whole change exists to prevent.
+check "range membership decides whether the installed pnpm satisfies the declaration" bash -c '
+    set -e
+    . /usr/local/share/devbase/setup.sh
+
+    _devbase_pnpm_satisfies "11.24.0" "^11.0.0"
+    _devbase_pnpm_satisfies "11.0.0" "^11.0.0"
+    ! _devbase_pnpm_satisfies "12.0.0" "^11.0.0"
+    ! _devbase_pnpm_satisfies "10.34.5" "^11.0.0"
+    # A caret floor is still a floor: 11.2.0 does not satisfy ^11.3.0.
+    ! _devbase_pnpm_satisfies "11.2.0" "^11.3.0"
+    # sort -V, not a string compare, or 11.10.0 would land below 11.9.0.
+    _devbase_pnpm_satisfies "11.10.0" "^11.9.0"
+
+    _devbase_pnpm_satisfies "11.24.5" "~11.24.0"
+    ! _devbase_pnpm_satisfies "11.25.0" "~11.24.0"
+
+    _devbase_pnpm_satisfies "12.0.0" ">=11.0.0"
+    ! _devbase_pnpm_satisfies "10.34.5" ">=11.0.0"
+
+    # An exact spec is still exact, so the packageManager path keeps the contract 1.6.0
+    # shipped.
+    _devbase_pnpm_satisfies "11.24.0" "11.24.0"
+    ! _devbase_pnpm_satisfies "11.24.1" "11.24.0"
+
+    # No pnpm satisfies nothing, and a shape this cannot read answers no rather than yes —
+    # unsatisfied means reinstall and report, which is the recoverable direction.
+    ! _devbase_pnpm_satisfies "" "^11.0.0"
+    ! _devbase_pnpm_satisfies "11.24.0" "latest"'
 
 # The npm floor compares whole versions, not majors: `>=12.3.0` is not satisfied by
 # 12.0.0, and a plain string compare would put 12.10.0 below 12.9.0.

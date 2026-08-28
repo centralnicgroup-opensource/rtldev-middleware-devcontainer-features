@@ -36,8 +36,7 @@ jobs:
         with:
           node-version: lts/*
 
-      - name: Install pnpm
-        run: npm install -g pnpm
+      - uses: pnpm/action-setup@v6
 
       # The devcontainer CLI comes from the lockfile rather than a global
       # `npm install -g @devcontainers/cli`. That global install takes the `latest`
