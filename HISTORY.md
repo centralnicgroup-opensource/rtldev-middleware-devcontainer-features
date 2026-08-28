@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.6.0...v1.7.0) (2026-08-28)
+
+
+### Features
+
+* **devbase:** read devEngines.packageManager for the pnpm version ([14041a2](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/14041a2c393e8d6bda9ad8108637ac46383acdca))
+
 # [1.6.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.5.0...v1.6.0) (2026-08-28)
 
 
