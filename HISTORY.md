@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.5.0...v1.6.0) (2026-08-28)
+
+
+### Features
+
+* **devbase:** install the pnpm the repository declared ([b38f079](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/b38f0792c51ebe0f90d1f5c397458e0ac319d075))
+
 # [1.5.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.4.0...v1.5.0) (2026-08-21)
 
 
