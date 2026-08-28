@@ -74,4 +74,86 @@ check "banner honours env-info.conf" bash -c '
   ! devbase-env-info | grep -q "Node toolchain"
 '
 
+# --- the pnpm the workspace asked for -----------------------------------------
+# Last in the file on purpose: these checks replace the container's global pnpm and npm,
+# so anything that asserts the versions the image shipped has to run above them.
+#
+# Asserted on `pnpm --version`, never on a log line. The entire point of the step is which
+# binary answers on PATH afterwards, and a step that logs the right version while leaving
+# the wrong pnpm installed is the exact failure it exists to prevent — the container used
+# to run whatever pnpm was newest on build day while CI honoured the declaration.
+check "pnpm is aligned to the version packageManager declares" bash -c '
+    set -e
+    export PNPM_HOME="${HOME}/.local/share/pnpm"
+    export PATH="${PNPM_HOME}:${PATH}"
+    rm -rf /tmp/declared && mkdir -p /tmp/declared && cd /tmp/declared
+    # A real release, and deliberately older than anything the Node feature installs as
+    # latest — so a step that quietly does nothing cannot pass this. The integrity suffix
+    # rides along because npm must never be handed one.
+    printf "{\"name\":\"probe\",\"private\":true,\"packageManager\":\"pnpm@10.18.0+sha512-unverified\"}\n" > package.json
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_pnpm > /tmp/declared.log 2>&1
+    hash -r
+    # Read from / and never from the workspace. Inside it, pnpm sees the same field and
+    # fetches and re-execs the declared version itself, so `pnpm --version` there answers
+    # 10.18.0 whether or not anything was installed — an assertion that could not fail.
+    installed="$(cd / && pnpm --version)"
+    test "${installed}" = "10.18.0" || { cat /tmp/declared.log; echo "installed ${installed}"; exit 1; }'
+
+# The other half: a workspace that declares nothing devbase can act on keeps the pnpm it
+# already has. Reinstalling `latest` over it would put the container back on whichever
+# version happens to be newest today, which is the accident this step removes.
+check "a workspace with no usable declaration keeps its pnpm" bash -c '
+    set -e
+    export PNPM_HOME="${HOME}/.local/share/pnpm"
+    export PATH="${PNPM_HOME}:${PATH}"
+    . /usr/local/share/devbase/setup.sh
+    # Both readings are taken from /, for the reason above — and because pnpm refuses to
+    # run at all in a workspace whose packageManager names another tool, which is one of
+    # the manifests below.
+    before="$(cd / && pnpm --version)"
+    rm -rf /tmp/unusable && mkdir -p /tmp/unusable && cd /tmp/unusable
+    for manifest in "{\"packageManager\":\"yarn@4.9.2\"}" \
+        "{\"packageManager\":\"pnpm@^10.18.0\"}" \
+        "{\"name\":\"probe\"}"; do
+        printf "%s\n" "${manifest}" > package.json
+        devbase_setup_pnpm > /tmp/unusable.log 2>&1
+        hash -r
+        installed="$(cd / && pnpm --version)"
+        test "${installed}" = "${before}" || {
+            cat /tmp/unusable.log
+            echo "${manifest} moved pnpm from ${before} to ${installed}"
+            exit 1
+        }
+    done'
+
+# --- the npm floor ------------------------------------------------------------
+# The floor is the Feature's other npm invocation, and it had no test at all until now.
+# Both checks need npm off the version the image shipped, so the move is part of the first
+# and the second inherits it — which is why the second re-asserts that precondition rather
+# than assuming the order.
+check "an engines.npm that is not a >= floor leaves npm alone" bash -c '
+    set -e
+    . /usr/local/share/devbase/setup.sh
+    rm -rf /tmp/floor && mkdir -p /tmp/floor && cd /tmp/floor
+    npm i --silent -g npm@11 >/dev/null 2>&1
+    hash -r
+    test "$(npm --version | cut -d. -f1)" = "11"
+    # `^12.0.0` is the form that disables this step. It is not a floor devbase can read,
+    # so npm has to stay where it is rather than be guessed at.
+    printf "{\"engines\":{\"npm\":\"^12.0.0\"}}\n" > package.json
+    devbase_setup_npm_floor > /tmp/floor-skip.log 2>&1
+    hash -r
+    test "$(npm --version | cut -d. -f1)" = "11" || { cat /tmp/floor-skip.log; exit 1; }'
+
+check "npm is raised to the major a >= engines.npm floor names" bash -c '
+    set -e
+    . /usr/local/share/devbase/setup.sh
+    cd /tmp/floor
+    test "$(npm --version | cut -d. -f1)" = "11"
+    printf "{\"engines\":{\"npm\":\">=12.0.0\"}}\n" > package.json
+    devbase_setup_npm_floor > /tmp/floor-raise.log 2>&1
+    hash -r
+    test "$(npm --version | cut -d. -f1)" = "12" || { cat /tmp/floor-raise.log; exit 1; }'
+
 reportResults

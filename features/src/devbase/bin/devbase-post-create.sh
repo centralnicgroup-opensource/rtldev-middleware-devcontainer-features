@@ -38,9 +38,11 @@ main() {
     # shellcheck disable=SC2064
     trap "cd '${original_dir}'" EXIT
 
-    # Unconditional since installPnpm was removed. pnpm arrives with the node dependency,
-    # so devbase_setup_pnpm is a no-op in any normal build and remains only to cover a base
-    # image that somehow carries npm without it. The npm floor is separate work either way.
+    # Both read package.json, so both need the workspace — and both run before anything
+    # that uses the toolchain they set up. The floor first: it is npm that then installs
+    # pnpm. Unconditional since installPnpm was removed, and no longer a no-op — pnpm
+    # arrives with the node dependency at whatever version was newest that day, and
+    # devbase_setup_pnpm is what replaces it with the one the repository declared.
     devbase_setup_npm_floor
     devbase_setup_pnpm
 

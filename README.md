@@ -80,12 +80,20 @@ these three.
 > container before `devbase` runs. The `installPnpm` option therefore decided nothing and
 > **has been removed** — pnpm is now simply part of what you get. Nothing consumes this
 > Feature yet, which is the only reason dropping an option did not need a major.
+>
+> `latest` is also why `devbase` does not leave the pnpm _version_ to that feature: it means
+> whichever release was newest on the day the image was built, while CI runs the one your
+> `package.json` declares. `devbase` installs the declared one instead — see
+> [the pnpm version](features/src/devbase/NOTES.md#the-pnpm-version).
 
 What it does, on first create and on every attach:
 
 - **zsh** with the team prompt (git status segment, history search, autosuggestions)
 - **commitizen** plus `cz-conventional-changelog`, and the matching `.czrc`
-- **pnpm**, installed globally, with `PNPM_HOME` on `PATH`
+- **pnpm**, installed globally with `PNPM_HOME` on `PATH`, at the version your
+  `package.json` declares in `packageManager` — the same field CI reads, so the container
+  and the pipeline cannot disagree
+- **npm** raised to the major `engines.npm` names, for the floor no Node release bundles
 - **`gh` credential helper** wired into the workspace's git config
 - **Persistent shell history** across container rebuilds
 - **Dependency installation** — `composer.json` via composer, `package.json` via pnpm,

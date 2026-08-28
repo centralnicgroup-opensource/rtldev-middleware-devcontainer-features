@@ -42,6 +42,61 @@ Shared devcontainer behaviour for RTLDEV middleware repositories: zsh with the t
 - `foxundermoon.shell-format`
 - `redhat.vscode-yaml`
 
+## The pnpm version
+
+The container installs the pnpm your `package.json` declares:
+
+```jsonc
+"packageManager": "pnpm@11.24.0"
+```
+
+It is the same field CI reads (`pnpm/action-setup`), and that is the whole point. Before
+this, the Node dependency's `pnpmVersion: latest` decided it — so a container ran whichever
+pnpm was newest on the day its image was built, while the pipeline reviewing its lockfile
+ran the declared one. Nothing announced the difference; a lockfile written by one and
+rejected by the other is how you found out.
+
+What counts as a declaration is narrow on purpose:
+
+- an exact `pnpm@X.Y.Z`, optionally with the `+sha512-...` integrity suffix, which is
+  stripped before npm sees it
+- **not** a range. `packageManager` forbids one by specification, and honouring one anyway
+  would resolve to a different version on different days — the drift this reads the field
+  to remove
+- **not** a `packageManager` naming npm or yarn. That repository said nothing about pnpm,
+  and inventing an answer from it would be the Feature choosing rather than reading
+
+Declare nothing and the pnpm already in the container stays put, untouched — `latest` is
+installed only for a container that arrived with no pnpm at all. So adopting the field is
+opt-in per repository, and a repository that has not yet adopted it sees no change.
+
+**No option switches this off.** One would only give a repository a second place to say
+which pnpm it wants, and the container-versus-CI disagreement back again. To choose a
+version, declare it; to keep what you have, declare nothing.
+
+npm remains the installation route, deliberately. corepack is not the alternative — Node
+stopped bundling it at v25, and our engines policy spans `^24.15.0 || ^26.0.0`, so it is
+absent from half of that range. The standalone installer is a pipe-to-shell with nothing to
+verify it against. npm is already present, and it is the route the Node feature itself used
+to put pnpm there, so this replaces that global in place rather than shadowing it from a
+second prefix and leaving `PATH` order to decide the winner.
+
+The step runs before dependency installation, so `pnpm install` uses the version you
+declared rather than the one the image happened to ship.
+
+### The npm floor
+
+The neighbouring step reads `engines.npm` and raises npm to the major it names, because no
+Node release bundles npm 12 and an explicit floor is the only way to get one. It acts on a
+`>=` floor and nothing else:
+
+```jsonc
+"engines": { "npm": ">=12.0.0" }
+```
+
+`^12.0.0` is not a floor it can read, and a container whose npm stays behind because of it
+now says so in the create log rather than skipping in silence.
+
 ## The container locale
 
 This Feature sets `LANG=C.UTF-8` for the whole container, via `containerEnv` in its
