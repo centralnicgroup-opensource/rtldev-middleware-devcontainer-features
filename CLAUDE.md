@@ -114,9 +114,26 @@ environment.
 - **The node feature ships `pnpmVersion: latest`, so pnpm exists in every container** and
   `installPnpm` was **removed** rather than left as a flag that decided nothing — normally a
   major, taken as part of a `feat` only because nothing consumes this Feature yet. Do not
-  reintroduce it: `devbase_setup_pnpm` still runs, unconditionally, and is a no-op in any
-  normal build. The `pnpm is missing` branch it guards is unreachable in a real build and is
-  asserted in `test.sh` with an emptied `PATH`.
+  reintroduce it. The `pnpm is missing` branch it guarded is still unreachable in a real
+  build and is asserted in `test.sh` with an emptied `PATH`.
+- **`devbase_setup_pnpm` aligns pnpm to the workspace's `packageManager`** (RSRMID-3010), so
+  it is no longer the no-op that `pnpmVersion: latest` made it. `latest` is what put the
+  container and CI on different pnpms while both looked healthy; the field is what CI reads,
+  so reading the same one is the only thing that closes it. Narrow on purpose: an exact
+  `pnpm@X.Y.Z` (the `+sha512` suffix stripped) and nothing else — a range is invalid in that
+  field by specification and resolves differently on different days, and a `packageManager`
+  naming npm or yarn made no statement about pnpm. Both read as no declaration, which leaves
+  the installed pnpm untouched; `latest` is installed only when there is no pnpm at all. **No
+  option gates it** — one would be a second place to declare the version, which is the drift
+  itself. npm stays the route: corepack is gone from Node 25+ and the engines policy spans
+  `^24.15.0 || ^26.0.0`, the standalone installer is an unverifiable pipe-to-shell, and npm
+  is what put that global there in the first place, so this replaces it in place rather than
+  shadowing it.
+- **`devbase_setup_npm_floor` acts on a `>=` floor only**, and compares whole versions with
+  `sort -V` rather than majors — `>=12.3.0` is not satisfied by 12.0.0, and a string compare
+  puts 12.10.0 below 12.9.0. A `^12.0.0` disables it entirely, which it now reports instead
+  of skipping in silence; the toolchain policy mandating the `>=` form is enforced from
+  another repository (RSRMID-3008), so the two can drift with nothing else to show for it.
 - **RTK is here rather than in each repository's Dockerfile** (RSRMID-2933) because the
   hook that calls it lives in the bind-mounted `~/.claude/settings.json` — shared with the
   host — while the binary is not, so a container without it fires a hook that exits 127 on

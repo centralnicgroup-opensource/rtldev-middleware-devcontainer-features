@@ -89,6 +89,60 @@ check "log helpers load" bash -c '. /usr/local/share/devbase/log.sh; \
 check "setup helpers load" bash -c '. /usr/local/share/devbase/setup.sh; \
     declare -f devbase_setup_pnpm >/dev/null'
 
+# --- which pnpm the workspace asks for ----------------------------------------
+# The reading half of devbase_setup_pnpm, tested here because it needs no network and no
+# install: it is a pure function of package.json, so every shape it has to survive can be
+# enumerated in one place. The installing half is asserted on the real binary in the
+# node_project scenario.
+#
+# Only an exact `pnpm@X.Y.Z` is a declaration devbase acts on. A range is invalid in this
+# field by specification and would resolve differently on different days — which is the
+# drift the field is read to remove — and a `packageManager` naming another tool said
+# nothing about pnpm at all. Both must come back empty rather than nearly-right.
+check "the declared pnpm version is read from packageManager" bash -c '
+    set -e
+    . /usr/local/share/devbase/setup.sh
+    rm -rf /tmp/decl && mkdir -p /tmp/decl && cd /tmp/decl
+
+    printf "{\"packageManager\":\"pnpm@11.24.0\"}\n" > package.json
+    test "$(_devbase_declared_pnpm)" = "11.24.0"
+
+    # The field may carry an integrity hash, which npm must never be handed.
+    printf "{\"packageManager\":\"pnpm@11.24.0+sha512-abc\"}\n" > package.json
+    test "$(_devbase_declared_pnpm)" = "11.24.0"'
+
+check "a packageManager devbase cannot act on reads as no declaration" bash -c '
+    set -e
+    . /usr/local/share/devbase/setup.sh
+    rm -rf /tmp/nodecl && mkdir -p /tmp/nodecl && cd /tmp/nodecl
+    for manifest in "{\"packageManager\":\"pnpm@^11.24.0\"}" \
+        "{\"packageManager\":\"yarn@4.9.2\"}" \
+        "{\"packageManager\":\"npm@12.0.0\"}" \
+        "{\"name\":\"probe\"}" \
+        "not json at all"; do
+        printf "%s\n" "${manifest}" > package.json
+        test -z "$(_devbase_declared_pnpm)"
+    done
+    # A workspace with no manifest at all is the same answer, not an error.
+    rm -f package.json
+    test -z "$(_devbase_declared_pnpm)"'
+
+# The npm floor compares whole versions, not majors: `>=12.3.0` is not satisfied by
+# 12.0.0, and a plain string compare would put 12.10.0 below 12.9.0.
+#
+# Every negative here is an explicit `exit 1` rather than a `! ...` line. `set -e` is
+# specified to ignore a command it negates, so a `!` assertion that is not the last line
+# of the script reports SUCCESS however wrong the answer is — which is exactly how this
+# check first passed against a `sort` with no -V.
+check "version comparison orders releases, not strings" bash -c '
+    set -e
+    . /usr/local/share/devbase/setup.sh
+    _devbase_version_lt 11.19.0 12.0.0
+    _devbase_version_lt 12.0.2 12.3.0
+    if _devbase_version_lt 12.10.0 12.9.0; then echo "12.10.0 sorted below 12.9.0"; exit 1; fi
+    if _devbase_version_lt 12.0.0 12.0.0; then echo "equal versions compared as lower"; exit 1; fi
+    if _devbase_version_lt 12.0.2 12.0.0; then echo "12.0.2 sorted below 12.0.0"; exit 1; fi'
+
 # execute_with_indent's exit status is what every caller branches on, so a
 # regression there reports SUCCESS for a step that did nothing. It once read $?
 # after an `if` with no else branch, which is always 0.

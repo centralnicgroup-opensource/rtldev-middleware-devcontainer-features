@@ -35,10 +35,20 @@ _devbase_in_ci() {
 # Node toolchain
 # ---------------------------------------------------------------------------
 
-# devbase_setup_npm_floor — raise npm to the major version package.json asks for.
+# _devbase_version_lt <a> <b> — true when version a sorts below version b.
+#
+# `sort -V` rather than a hand-rolled field comparison: the majors are not the whole
+# story once a floor like `>=12.3.0` exists, and coreutils already knows how to order
+# dotted versions.
+_devbase_version_lt() {
+    [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
+}
+
+# devbase_setup_npm_floor — raise npm to the version package.json asks for.
 #
 # The Node feature ships whatever npm the Node release bundles, which regularly
-# lags a declared `engines.npm`. Without this the container advertises a
+# lags a declared `engines.npm` — no Node release bundles npm 12, so an explicit
+# floor is the only way to get one. Without this the container advertises a
 # constraint it does not meet, and `npm` warns on every install.
 #
 # Generalised from mcp-dis, where the required major was hardcoded to 12: the
@@ -48,18 +58,27 @@ devbase_setup_npm_floor() {
     command_exists npm || return 0
     command_exists jq || return 0
 
-    local declared floor current
+    local declared floor major current
     declared="$(jq -r '.engines.npm // empty' package.json 2>/dev/null)" || return 0
     [ -n "${declared}" ] || return 0
 
-    # Only a ">=X..." floor is actionable; any other range form is left alone
-    # rather than guessed at.
+    # Only a ">=X.Y.Z" floor is actionable; any other range form is left alone rather
+    # than guessed at — but said out loud rather than skipped in silence. `^12.0.0`
+    # disables this step completely, and the policy that mandates the `>=` form is
+    # enforced from another repository, so the two can drift apart with nothing to show
+    # for it but an npm that quietly stayed behind.
     case "${declared}" in
         '>='*) floor="${declared#>=}" ;;
-        *) return 0 ;;
+        *)
+            log_detail "engines.npm is '${declared}', not a >= floor — leaving npm alone"
+            return 0
+            ;;
     esac
-    floor="${floor%%.*}"
-    [ -n "${floor}" ] || return 0
+    # A compound range (">=12.0.0 <13.0.0") carries its floor first; the rest is a
+    # ceiling this step has no opinion about.
+    floor="${floor%% *}"
+    major="${floor%%.*}"
+    [ -n "${major}" ] || return 0
 
     log_info "Checking npm against package.json engines (${declared})..."
     current="$(npm --version 2>/dev/null)" || current=""
@@ -68,43 +87,151 @@ devbase_setup_npm_floor() {
         return 0
     fi
 
-    if [ "${current%%.*}" -lt "${floor}" ]; then
-        # No sudo: the Node feature installs into a prefix owned by the remote
-        # user, and sudo's secure_path does not contain that npm at all.
-        execute_with_indent "npm i --silent -g npm@${floor}" \
-            "Upgrading npm ${current} to v${floor}" ||
-            log_error "npm upgrade failed — continuing with ${current}"
-        log_success "npm is now $(npm --version 2>/dev/null || echo "${current}")"
-    else
+    if ! _devbase_version_lt "${current}" "${floor}"; then
         log_detail "npm ${current} already satisfies ${declared}"
+        return 0
+    fi
+
+    # The major rather than the exact floor: the floor is a minimum, and the newest
+    # release of that major is the closest thing to "what the repository asked for"
+    # that does not pin every container to one patch release.
+    #
+    # No sudo: the Node feature installs into a prefix owned by the remote
+    # user, and sudo's secure_path does not contain that npm at all.
+    execute_with_indent "npm i --silent -g npm@${major}" \
+        "Upgrading npm ${current} to the latest v${major}" ||
+        log_error "npm upgrade failed — continuing with ${current}"
+
+    # Verified, not assumed: an install can report success and still leave a version
+    # below the floor — the newest v12 is below `>=12.99.0` — and "npm is now ..."
+    # printed over that sends the next person to look at npm's warning instead of here.
+    hash -r 2>/dev/null || true
+    current="$(npm --version 2>/dev/null)" || current=""
+    if [ -n "${current}" ] && ! _devbase_version_lt "${current}" "${floor}"; then
+        log_success "npm is now ${current}"
+    else
+        log_error "npm ${current:-unknown} still does not satisfy ${declared}"
     fi
 }
 
-# devbase_setup_pnpm — install pnpm globally if it is not already there.
+# _devbase_declared_pnpm — echo the exact pnpm version the workspace declares.
+#
+# The declaration is package.json's `packageManager` field, which is also what CI reads
+# (pnpm/action-setup) — one field, so the container and the pipeline cannot disagree.
+# Nothing else is accepted:
+#
+#   * a `packageManager` naming npm or yarn is a repository that made no statement about
+#     pnpm, and inventing one from it would be devbase choosing rather than reading;
+#   * a range is invalid in this field by specification, and honouring one anyway would
+#     resolve to a different version on different days — the exact drift this reads it to
+#     remove. Both come back empty, and the caller reports them together.
+#
+# Pure on purpose — it echoes and never logs, so it stays callable from a test.
+_devbase_declared_pnpm() {
+    [ -f "package.json" ] || return 0
+    command_exists jq || return 0
+
+    local declared
+    declared="$(jq -r '.packageManager // empty' package.json 2>/dev/null)" || return 0
+    case "${declared}" in
+        pnpm@*) declared="${declared#pnpm@}" ;;
+        *) return 0 ;;
+    esac
+    # The field may carry an integrity hash: "pnpm@11.24.0+sha512-...".
+    declared="${declared%%+*}"
+    case "${declared}" in
+        [0-9]*.[0-9]*.[0-9]*) printf '%s' "${declared}" ;;
+        *) return 0 ;;
+    esac
+}
+
+# _devbase_pnpm_version — echo the version of the *installed* pnpm.
+#
+# Probed from `/` rather than the workspace, and that is load-bearing twice over. pnpm
+# reads the very field this step reads, from the nearest package.json above the cwd, and
+# acts on it before doing anything else:
+#
+#   * a workspace declaring `yarn@...` makes every pnpm command exit with "This project is
+#     configured to use yarn", so a probe run there reports no pnpm at all and this step
+#     concludes the container has none;
+#   * a workspace declaring another *pnpm* makes pnpm fetch and re-exec that version
+#     (`manage-package-manager-versions`, on by default), so the probe answers with the
+#     declared version whether or not it is the one installed. That is the papering-over
+#     that hid this drift in the first place, and a probe subject to it would report
+#     alignment that never happened — and make any test of it unable to fail.
+#
+# `/` has no package.json above it, so what comes back is the pnpm this step installs.
+_devbase_pnpm_version() {
+    command_exists pnpm || return 0
+    (cd / && pnpm --version 2>/dev/null) || return 0
+}
+
+# devbase_setup_pnpm — put the pnpm the repository asked for on PATH.
+#
+# The Node dependency ships `pnpmVersion: latest`, so a container already has *a* pnpm —
+# whichever was newest on the day the image was built. That is an environment accident,
+# and it is the container half of the toolchain drift the repositories' `packageManager`
+# field exists to close: CI honours the declaration, so a container that ignores it runs
+# a different pnpm than the pipeline that reviews its lockfile.
+#
+# So this aligns rather than installs: the declared version when there is one, whatever is
+# already present when there is not, and `latest` only for the container that arrived with
+# no pnpm at all.
+#
+# npm stays the installation route, deliberately. corepack is not the alternative — Node
+# stopped bundling it at v25, and our engines policy spans ^24.15.0 || ^26.0.0, so it is
+# absent from half of that range. The standalone installer is a pipe-to-shell with nothing
+# to verify it against, which the RTK download rule already rules out. npm is present
+# (the Node feature needs it), and it is the same route that feature used to put pnpm
+# there — so this replaces that global in place instead of shadowing it from a second
+# prefix and leaving PATH order to decide which one wins.
 #
 # Tries without sudo first, then with: php-sdk needed sudo (npm from apt, prefix
 # owned by root), mcp-dis needed no sudo (npm from the Node feature's
 # user-owned prefix). Trying in that order works for both instead of picking one
 # and being wrong in half the repositories.
 devbase_setup_pnpm() {
-    if command_exists pnpm; then
-        log_detail "pnpm already installed"
+    local declared current
+    declared="$(_devbase_declared_pnpm)"
+    current="$(_devbase_pnpm_version)"
+
+    if [ -z "${declared}" ]; then
+        if [ -n "${current}" ]; then
+            log_detail "pnpm ${current} installed; package.json declares no pnpm version"
+            return 0
+        fi
+        declared="latest"
+    elif [ "${declared}" = "${current}" ]; then
+        log_detail "pnpm ${current} already matches the declared packageManager"
         return 0
     fi
+
     if ! command_exists npm; then
         log_error "npm not found — skipping pnpm (add the Node feature to devcontainer.json)"
         return 0
     fi
 
-    log_info "Installing pnpm..."
-    if execute_with_indent "npm i --silent -g pnpm" "Installing pnpm globally"; then
-        log_success "pnpm installed"
-    elif command_exists sudo && execute_with_indent "sudo npm i --silent -g pnpm" \
-        "Installing pnpm globally (with sudo)"; then
-        log_success "pnpm installed"
+    log_info "Installing pnpm@${declared}..."
+    if ! execute_with_indent "npm i --silent -g pnpm@${declared}" \
+        "Installing pnpm@${declared} globally"; then
+        if ! command_exists sudo || ! execute_with_indent "sudo npm i --silent -g pnpm@${declared}" \
+            "Installing pnpm@${declared} globally (with sudo)"; then
+            log_error "Failed to install pnpm@${declared} — continuing with pnpm ${current:-none}"
+            return 0
+        fi
+    fi
+
+    # Ask PATH, not the exit code. An install that succeeds while a different pnpm keeps
+    # winning on PATH leaves the container running the version this step was meant to
+    # replace, and a SUCCESS line over that is worse than the mismatch.
+    hash -r 2>/dev/null || true
+    current="$(_devbase_pnpm_version)"
+    if [ -z "${current}" ]; then
+        log_error "pnpm is still not on PATH after installing pnpm@${declared}"
+    elif [ "${declared}" != "latest" ] && [ "${current}" != "${declared}" ]; then
+        log_error "pnpm ${current} is on PATH, but package.json asks for ${declared}"
     else
-        log_error "Failed to install pnpm"
-        return 0
+        log_success "pnpm ${current} installed"
     fi
 }
 
