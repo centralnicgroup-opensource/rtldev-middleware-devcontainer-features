@@ -27,8 +27,16 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: lts/*
-      - name: Install pnpm
-        run: npm install -g pnpm
+      # Reads devEngines.packageManager from package.json — the same field, in the same
+      # precedence, that devbase_setup_pnpm now reads at create time. That symmetry is the
+      # whole point: `npm install -g pnpm` took the `latest` dist-tag and ignored the
+      # declaration, so CI drifted from the containers it reviews lockfiles for, and would
+      # have crossed outside `^11.0.0` the day pnpm 12 takes that tag. No `version` input
+      # here on purpose — a second place to name the version is the drift itself.
+      #
+      # `run_install` defaults to null, so this installs pnpm and nothing else; the jobs
+      # that need dependencies still run their own `pnpm install --frozen-lockfile`.
+      - uses: pnpm/action-setup@v6
       # `pnpm run shellcheck` rather than an inline file list. The list used to live
       # both here and in package.json and had already drifted — this job checked
       # .husky/pre-commit and the script did not, so a broken hook passed `pnpm lint`
@@ -49,8 +57,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: lts/*
-      - name: Install pnpm
-        run: npm install -g pnpm
+      - uses: pnpm/action-setup@v6
       # Malformed metadata fails at publish time with a far worse error than this, and
       # only after a merge to main. The checks themselves live in
       # scripts/validate-features.sh so that `pnpm features:validate` runs exactly what
@@ -67,8 +74,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: lts/*
-      - name: Install pnpm
-        run: npm install -g pnpm
+      - uses: pnpm/action-setup@v6
       # A duplicate key is legal JSON — last one wins, silently — so prettier, jq and the
       # devcontainer CLI all accept it. Nothing else here would catch one, and a second
       # "initializeCommand" already discarded a build-time guard once.
@@ -83,8 +89,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: lts/*
-      - name: Install pnpm
-        run: npm install -g pnpm
+      - uses: pnpm/action-setup@v6
       # Prettier comes from the lockfile, not from `npx --yes prettier@3`. That form
       # resolved the latest 3.x and ignored package.json entirely, so CI formatted with
       # a different Prettier than the working tree does: an upstream publish that adds
@@ -106,8 +111,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: lts/*
-      - name: Install pnpm
-        run: npm install -g pnpm
+      - uses: pnpm/action-setup@v6
       # The same pinned actionlint the working tree runs, rather than
       # reviewdog/action-actionlint. Two reasons beyond dropping a third-party action:
       # the reviewer used `reporter: github-pr-check`, which has nothing to report on a

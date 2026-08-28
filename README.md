@@ -91,8 +91,9 @@ What it does, on first create and on every attach:
 - **zsh** with the team prompt (git status segment, history search, autosuggestions)
 - **commitizen** plus `cz-conventional-changelog`, and the matching `.czrc`
 - **pnpm**, installed globally with `PNPM_HOME` on `PATH`, at the version your
-  `package.json` declares in `packageManager` — the same field CI reads, so the container
-  and the pipeline cannot disagree
+  `package.json` declares in `devEngines.packageManager` or `packageManager` — the same
+  two fields CI reads, in the same order, so the container and the pipeline cannot
+  disagree
 - **npm** raised to the major `engines.npm` names, for the floor no Node release bundles
 - **`gh` credential helper** wired into the workspace's git config
 - **Persistent shell history** across container rebuilds
