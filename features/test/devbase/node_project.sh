@@ -34,15 +34,47 @@ check "banner reports a Node version" bash -c \
 # package.json can actually be installed here rather than only reported as unservable.
 # Until now nothing in the suite ever entered this branch — every scenario ran post-create
 # from /tmp, which has no manifest.
+#
+# The lockfile is committed here on purpose, and it is what the check depends on: devbase
+# tries `pnpm install --frozen-lockfile` first, and that is a headless install, so it needs
+# one. This probe used to ship a package.json alone and still reach the success branch,
+# because pnpm 11 quietly created the missing lockfile instead of refusing. pnpm 12 made it
+# strict — ERR_PNPM_NO_LOCKFILE — so the frozen attempt failed, the refreshed retry below
+# took over, and this check went red asserting a message that the fallback does not log. A
+# real repository commits its lockfile (and this repository's own standards say so), so the
+# realistic shape is also the one that exercises the branch this names.
+#
+# Written out by hand rather than generated: an empty importer set is all a manifest with no
+# dependencies needs, it requires no network, and it satisfies --frozen-lockfile on pnpm 11
+# and 12 alike — which matters because the node feature installs pnpm `latest`, so whichever
+# major CI lands on must pass this unchanged.
 check "installs Node dependencies from a real package.json" bash -c '
     set -e
     export PNPM_HOME="${HOME}/.local/share/pnpm"
     export PATH="${PNPM_HOME}:${PATH}"
     rm -rf /tmp/proj && mkdir -p /tmp/proj && cd /tmp/proj
     printf "{\"name\":\"probe\",\"version\":\"1.0.0\",\"private\":true}\n" > package.json
+    printf "lockfileVersion: \"9.0\"\n\nimporters:\n\n  .: {}\n" > pnpm-lock.yaml
     . /usr/local/share/devbase/setup.sh
     devbase_setup_project_dependencies > /tmp/proj.log 2>&1
-    grep -q "Node dependencies installed" /tmp/proj.log
+    grep -q "Node dependencies installed" /tmp/proj.log || { cat /tmp/proj.log; exit 1; }
+    test -d node_modules'
+
+# No lockfile at all is a third case, and only pnpm 12 made it distinct from the one above:
+# it is now refused rather than silently created, so devbase reaches the refreshed retry and
+# the container still comes up. Named here so the behaviour is deliberate — the failure it
+# guards against is someone reading the frozen attempt as a hard requirement and making a
+# missing lockfile fatal, which would stop a container over a file the retry can produce.
+check "a manifest with no lockfile still installs, via the refreshed retry" bash -c '
+    set -e
+    export PNPM_HOME="${HOME}/.local/share/pnpm"
+    export PATH="${PNPM_HOME}:${PATH}"
+    rm -rf /tmp/nolock && mkdir -p /tmp/nolock && cd /tmp/nolock
+    printf "{\"name\":\"probe\",\"version\":\"1.0.0\",\"private\":true}\n" > package.json
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_project_dependencies > /tmp/nolock.log 2>&1
+    grep -qE "Node dependencies installed|Installed without the frozen lockfile" /tmp/nolock.log \
+        || { cat /tmp/nolock.log; exit 1; }
     test -d node_modules'
 
 # A stale lockfile must not stop the container coming up: the frozen install fails, the
