@@ -30,7 +30,11 @@
   // pulls in via `dependsOn` — then cannot write its own config in the container. It has
   // to stay in step with the .claude mount below; dropping it while the mount remained
   // is exactly what the .ssh cleanup did.
-  "initializeCommand": "mkdir -p ${localEnv:HOME}/.claude && touch ${localEnv:HOME}/.gitconfig",
+  //
+  // ~/.zsh_history needs the same `touch` as ~/.gitconfig and for the same reason: it is
+  // bound as a single file since RSRMID-3052, and a missing source becomes a root-owned
+  // directory on the host that devbase can only report, not repair.
+  "initializeCommand": "mkdir -p ${localEnv:HOME}/.claude && touch ${localEnv:HOME}/.gitconfig ${localEnv:HOME}/.zsh_history",
 
   "features": {
     // `devcontainer features test` builds real containers, so this environment needs
@@ -90,17 +94,27 @@
 
   "remoteUser": "vscode",
 
+  // Each mount names one path and grants the least it can. ~/.gitconfig is readonly
+  // because the container reads that identity and does not maintain it — devbase writes
+  // credential and signing config with `git config --local`, never `--global`, exactly
+  // so the host's file stays untouched. ~/.zsh_history and ~/.claude are read-write
+  // because history and Claude Code session state are written.
   "mounts": [
-    "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,consistency=cached",
-    // /WSL_USER is where devbase looks for .zsh_history to persist shell history.
-    // The concatenation is deliberate — devcontainer.json has no conditional, so it
-    // relies on exactly one of HOME and USERPROFILE being empty to yield whichever the
-    // host defines. A host that defines BOTH (not unusual on Windows, where HOME is
-    // often set alongside the built-in USERPROFILE) produces a nonexistent path that
-    // Docker then creates, so /WSL_USER is an empty directory: devbase finds no
-    // .zsh_history, logs that history stays container-local, and exits 0. Nothing fails
-    // and history silently stops surviving rebuilds — suspect this line first.
-    "source=${localEnv:HOME}${localEnv:USERPROFILE},target=/WSL_USER,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,readonly",
+    // /WSL_USER/.zsh_history is where devbase looks for the history file, and this binds
+    // that file rather than the host home it sits in. Binding the home directory also
+    // works — the Feature only ever reads this one path — which is exactly why it went
+    // unquestioned, while handing every container read-write reach over the host's SSH
+    // keys, credentials and every other repository on the machine (RSRMID-3052).
+    //
+    // Narrowing it also retires the ${localEnv:HOME}${localEnv:USERPROFILE} idiom this
+    // line used to carry. That concatenation had no conditional to work with and relied
+    // on exactly one of the two being empty; a host defining BOTH (not unusual on
+    // Windows) yielded a nonexistent path, Docker created it, and devbase found an empty
+    // /WSL_USER and logged that history stays container-local. Nothing failed and history
+    // silently stopped surviving rebuilds. The remaining mounts here already used bare
+    // ${localEnv:HOME}, so this line now matches them instead of being the exception.
+    "source=${localEnv:HOME}/.zsh_history,target=/WSL_USER/.zsh_history,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
   ]
 

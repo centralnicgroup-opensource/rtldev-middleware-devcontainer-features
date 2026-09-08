@@ -42,11 +42,15 @@
   //
   // check-devbase-local.sh comes first and fails the build when ./devbase has drifted from
   // features/src/devbase — the one way this config can quietly lie to you.
-  "initializeCommand": "bash scripts/check-devbase-local.sh && mkdir -p ${localEnv:HOME}/.claude && touch ${localEnv:HOME}/.gitconfig",
+  "initializeCommand": "bash scripts/check-devbase-local.sh && mkdir -p ${localEnv:HOME}/.claude && touch ${localEnv:HOME}/.gitconfig ${localEnv:HOME}/.zsh_history",
 
+  // Kept identical in shape to the live frame's mounts, for the same reasons stated
+  // there at length: one named path each, readonly unless the container has to write it,
+  // and the host's ~/.zsh_history bound as that file rather than the home directory it
+  // sits in (RSRMID-3052).
   "mounts": [
-    "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,consistency=cached",
-    "source=${localEnv:HOME}${localEnv:USERPROFILE},target=/WSL_USER,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,readonly",
+    "source=${localEnv:HOME}/.zsh_history,target=/WSL_USER/.zsh_history,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
   ]
 }
