@@ -398,8 +398,9 @@ devbase_setup_zsh_autosuggestions() {
 
 # devbase_setup_history_persistence — keep shell history across rebuilds.
 #
-# Depends on the frame bind-mounting the host home at /WSL_USER. A missing mount
-# is a normal configuration, not an error, so it is reported as detail.
+# Depends on the frame binding the host's ~/.zsh_history at /WSL_USER/.zsh_history —
+# the file, not the home directory it sits in. A missing mount is a normal
+# configuration, not an error, so it is reported as detail.
 devbase_setup_history_persistence() {
     if _devbase_in_ci; then
         log_detail "Skipping history persistence in CI"
@@ -421,25 +422,50 @@ devbase_setup_history_persistence() {
         return 0
     fi
 
-    # An empty mount is not a host home: Docker creates a missing bind source as an
-    # empty directory, so this is the frame's source path failing to resolve — most
-    # often the ${localEnv:HOME}${localEnv:USERPROFILE} concatenation on a host that
-    # defines both. Creating a history file inside it would persist nothing and hide
-    # the cause, and this is the only place the mistake becomes visible at all.
+    # An empty ${mount} means the frame bound a *directory* here and its source path
+    # failed to resolve: Docker creates a missing bind source as an empty directory.
+    # Classically the ${localEnv:HOME}${localEnv:USERPROFILE} concatenation on a host
+    # that defines both, back when frames bound the whole home. Creating a history file
+    # inside it would persist nothing and hide the cause, and this is the only place the
+    # mistake becomes visible at all. A frame on the narrow single-file bind cannot
+    # reach this branch — its equivalent mistake is the directory check below.
     if [ -z "$(ls -A "${mount}" 2>/dev/null)" ]; then
         log_error "${mount} is empty — check that mount's source path in devcontainer.json"
         return 0
     fi
 
+    # A frame is expected to bind the host's ~/.zsh_history as a *single file* at this
+    # path, not to bind the whole host home at ${mount} — mounting a home directory to
+    # reach one file in it put every container within read-write reach of the host's
+    # SSH keys and credentials (RSRMID-3052). The narrow bind brings one new way to get
+    # it wrong: Docker creates a missing bind source itself, and for a source it has
+    # never seen it creates a *directory*, on the host.
+    #
+    # Without this branch that case reports SUCCESS, which is why it gets one. `touch` on
+    # an existing directory *succeeds* — it sets the mtime — so the bootstrap check below
+    # short-circuits, `ln -sf` happily links ~/.zsh_history to a directory, and the
+    # verification passes because a symlink to a directory does exist. The result is a
+    # container that logs "History linked" while zsh cannot write a single line of it.
+    if [ -d "${source}" ]; then
+        log_error "${source} is a directory — the host's ~/.zsh_history did not exist when the container was created; add a touch for it to initializeCommand"
+        return 0
+    fi
+
     # A host that has never run zsh has no history file, and nothing else will create
-    # one: waiting for it to appear is what kept persistence from ever starting.
+    # one: waiting for it to appear is what kept persistence from ever starting. Only
+    # reachable for a frame that still binds the whole home, where the source path is
+    # inside a directory the container can write.
     if [ ! -f "${source}" ] && ! touch "${source}" 2>/dev/null; then
         log_error "Could not create ${source} — history stays container-local"
         return 0
     fi
 
     ln -sf "${source}" "${target}"
-    if [ -L "${target}" ] && [ -e "${target}" ]; then
+    # -f, not -e: a symlink pointing at a directory satisfies -e, so -e would report
+    # SUCCESS for a link zsh cannot write history to. The directory check above catches
+    # the one way that is known to happen; this closes the class rather than the instance,
+    # because the only thing worth logging here is a link to a file that can be written.
+    if [ -L "${target}" ] && [ -f "${target}" ]; then
         log_success "History linked to ${source}"
     else
         log_error "Could not link ${target} to ${source}"

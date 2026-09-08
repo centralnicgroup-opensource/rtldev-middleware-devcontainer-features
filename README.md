@@ -177,7 +177,7 @@ All optional; the defaults are what php-sdk and mcp-dis want.
 | `timezone`                   | `Europe/Berlin`                                      | Written to `/etc/localtime` and `/etc/timezone`. Empty string leaves the image alone.                                                                                                                                                                             |
 | `globalPackages`             | `commitizen@latest,cz-conventional-changelog@latest` | Comma-separated global pnpm installs. Empty installs nothing.                                                                                                                                                                                                     |
 | `zshAutosuggestions`         | `true`                                               | Installs the zsh-autosuggestions plugin.                                                                                                                                                                                                                          |
-| `historyPersistence`         | `true`                                               | Symlinks `~/.zsh_history` to `/WSL_USER/.zsh_history`, creating the host file if it does not exist yet. Needs the host home mounted at `/WSL_USER`; skipped silently if not.                                                                                      |
+| `historyPersistence`         | `true`                                               | Symlinks `~/.zsh_history` to `/WSL_USER/.zsh_history`. Needs the frame to bind the host's `~/.zsh_history` at that path — the file, not the home directory; skipped silently if not.                                                                              |
 | `ghCredentialHelper`         | `true`                                               | Points the workspace git credential helper at `gh auth git-credential`.                                                                                                                                                                                           |
 | `sshCommitSigning`           | `true`                                               | Repairs SSH commit signing when a mounted host `~/.gitconfig` points `user.signingkey` at a key file the container lacks; uses the forwarded ssh-agent and writes an inline `key::` key to the workspace git config. Never enables signing you did not configure. |
 | `envInfoBanner`              | `true`                                               | Prints the toolchain banner on attach; also installs `devbase-env-info`.                                                                                                                                                                                          |
@@ -566,19 +566,38 @@ interactive, non-CI shell, and the theme needs Oh My Zsh in the image (the
 `mcr.microsoft.com/devcontainers/base` images have it). A base image without it still
 gets a working shell, just unthemed.
 
-**Shell history did not survive a rebuild.** `historyPersistence` needs the host home
-bind-mounted at `/WSL_USER`; check the frame's `mounts` (or the compose service's
-volumes). The step is skipped silently when the mount is absent, because that is a
-legitimate configuration. A host with no `~/.zsh_history` yet is _not_ that case — the
-file is created and linked, so persistence starts on the first create rather than waiting
-for a file nothing would ever write.
+**Shell history did not survive a rebuild.** `historyPersistence` needs the frame to bind
+the host's `~/.zsh_history` at `/WSL_USER/.zsh_history`; check the frame's `mounts` (or the
+compose service's volumes). The step is skipped silently when the mount is absent, because
+that is a legitimate configuration.
 
-**`/WSL_USER is empty` in post-create.** The mount exists but its source path resolved to
-nothing, and Docker created the missing source as an empty directory. On Windows hosts the
-usual cause is the `${localEnv:HOME}${localEnv:USERPROFILE}` idiom used to name the host
-home: it relies on exactly one of the two being set, and concatenates them into a
-nonexistent path when both are. Fix the `source=` in the frame's `mounts` — the Feature
-reports this rather than seeding a history file into a directory the host never sees.
+Bind **that file**, not the home directory it sits in. Binding the home directory also
+satisfies the Feature — it only ever reads `/WSL_USER/.zsh_history` — but it hands the
+container read-write reach over the host's SSH keys, credentials and every other
+repository on the host, which is what RSRMID-3052 closed across this fleet. The frame
+also needs the file to exist on the host before the bind:
+
+```jsonc
+"initializeCommand": {
+  "zsh-history": "touch ${localEnv:HOME}/.zsh_history"
+},
+"mounts": [
+  "source=${localEnv:HOME}/.zsh_history,target=/WSL_USER/.zsh_history,type=bind,consistency=cached"
+]
+```
+
+**`/WSL_USER/.zsh_history is a directory` in post-create.** The frame binds the file but
+the host file did not exist when the container was created, so Docker created the missing
+bind source as a directory — on the host, where it outlives the container. Add the
+`initializeCommand` touch above, delete the stray directory on the host, and rebuild.
+
+**`/WSL_USER is empty` in post-create.** Only a frame that still binds a whole _directory_
+at `/WSL_USER` reaches this: the mount exists but its source path resolved to nothing, and
+Docker created the missing source as an empty directory. On Windows hosts the usual cause
+is the `${localEnv:HOME}${localEnv:USERPROFILE}` idiom once used to name the host home —
+it relies on exactly one of the two being set, and concatenates them into a nonexistent
+path when both are. Moving to the single-file bind above removes the idiom along with the
+mount that needed it.
 
 **`pnpm: command not found` in post-create.** No Node toolchain in the container. Add
 `ghcr.io/devcontainers/features/node:2` — `installsAfter` then guarantees it is installed

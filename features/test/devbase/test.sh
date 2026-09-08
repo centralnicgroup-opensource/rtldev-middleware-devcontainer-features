@@ -433,10 +433,15 @@ check "ssh signing picks the agent key whose comment names the configured one" b
     ssh-agent -k >/dev/null'
 
 # The history symlink is the whole of historyPersistence, and it depends on a host mount
-# the consuming frame provides. Every branch matters, and they are not interchangeable: a
-# missing mount is a supported configuration and must stay a detail, an empty one is a
-# broken mount source that must not stay silent, and a mount with no history file yet is
-# a first run that has to be bootstrapped rather than skipped forever.
+# the consuming frame provides — since RSRMID-3052 a bind of the host's ~/.zsh_history at
+# /WSL_USER/.zsh_history, the file rather than the home directory it sits in. Every branch
+# matters, and they are not interchangeable: a missing mount is a supported configuration
+# and must stay a detail, an empty one is a broken mount source that must not stay silent,
+# a directory where the file should be is the narrow bind's own misconfiguration and must
+# name the missing initializeCommand touch, and a mount with no history file yet is a
+# first run that has to be bootstrapped rather than skipped forever.
+#
+# This first case is the narrow bind's shape: /WSL_USER holding nothing but the file.
 check "shell history is linked when the host mount exists" bash -c '
     set -e
     sudo mkdir -p /WSL_USER && sudo touch /WSL_USER/.zsh_history
@@ -492,6 +497,27 @@ check "an empty host mount is reported instead of bootstrapped" bash -c '
     . /usr/local/share/devbase/setup.sh
     devbase_setup_history_persistence 2>&1 | grep -q "is empty"
     ! test -e /WSL_USER/.zsh_history
+    ! test -e "${HOME}/.zsh_history"'
+
+# The single-file bind has its own way of failing, and it does not look like any of the
+# above: the frame names ~/.zsh_history as the source, the host file does not exist, and
+# Docker creates the missing source as a *directory*. /WSL_USER is neither absent nor
+# empty, so only the target itself gives it away.
+#
+# Checked against the implementation with the guard removed, and it does not merely
+# report the wrong cause — it reports SUCCESS. `touch` on an existing directory succeeds,
+# so the bootstrap check short-circuits, `ln -sf` links ~/.zsh_history to a directory, and
+# a symlink to a directory satisfies the -e the verification used to use. So this asserts
+# both halves: the message names the frame's missing touch, and no symlink is left behind.
+check "a directory where the history file belongs names the missing touch" bash -c '
+    set -e
+    sudo rm -rf /WSL_USER && sudo mkdir -p /WSL_USER/.zsh_history
+    sudo chown -R "$(id -un)" /WSL_USER
+    rm -f "${HOME}/.zsh_history"
+    export CI=false GITHUB_ACTIONS=false
+    . /usr/local/share/devbase/setup.sh
+    devbase_setup_history_persistence 2>&1 | grep -q "is a directory"
+    devbase_setup_history_persistence 2>&1 | grep -q "initializeCommand"
     ! test -e "${HOME}/.zsh_history"'
 
 # devbase_setup_project_dependencies is the step every consuming repository depends on,

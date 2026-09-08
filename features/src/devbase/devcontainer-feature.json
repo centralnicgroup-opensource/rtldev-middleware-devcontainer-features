@@ -30,7 +30,7 @@
     "historyPersistence": {
       "type": "boolean",
       "default": true,
-      "description": "Symlink ~/.zsh_history to /WSL_USER/.zsh_history so shell history survives rebuilds. Needs the host home bind-mounted at /WSL_USER by the frame; skipped silently when that mount is absent, and always skipped in CI."
+      "description": "Symlink ~/.zsh_history to /WSL_USER/.zsh_history so shell history survives rebuilds. Needs the frame to bind the host's ~/.zsh_history at that path — the file itself, not the home directory it sits in; skipped silently when that mount is absent, and always skipped in CI."
     },
     "ghCredentialHelper": {
       "type": "boolean",
