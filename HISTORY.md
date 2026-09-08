@@ -1,3 +1,10 @@
+## [1.7.1](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.7.0...v1.7.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* **devbase:** report a history mount that is a directory instead of linking it ([3832475](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/3832475cbda341bda084324d6f535132c8656f12))
+
 # [1.7.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.6.0...v1.7.0) (2026-08-28)
 
 
