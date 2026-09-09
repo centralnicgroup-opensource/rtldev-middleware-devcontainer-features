@@ -52,12 +52,11 @@
     //
     // claude-code used to be a third. 2.0.0 dropped it (RSRMID-3053): the VS Code
     // extension runs its own bundled runtime, so the npm global was a redundant second
-    // copy that could not even update itself. This frame still references `devbase:1`
-    // below, so it keeps the CLI until that reference moves to `:2` — after which there is
-    // deliberately no `claude` on PATH here.
+    // copy that could not even update itself. This frame now references `:2`, so there is
+    // deliberately no `claude` on PATH here — the extension supplies it.
     //
     // Every removal from this list is a bet that the *published* Feature already provides
-    // it, because this list resolves devbase:1 from the registry. Dropping github-cli once
+    // it, because this list resolves devbase from the registry. Dropping github-cli once
     // on the strength of a dependsOn that existed only in the working tree is how every
     // rebuild produced a container with no `gh`, surfacing as a `git push` dying in the
     // credential helper. So the Feature change releases first and this list shrinks after.
@@ -81,10 +80,10 @@
     // the rarer case of wanting the working-tree Feature in *this* container; see the
     // README's "Developing a Feature".
     //
-    // Chicken-and-egg on a brand-new repository: until the first publish there is no
-    // devbase:1 to pull, so run the "Publish features (manual)" workflow once — or use
-    // `pnpm devbase:local` — before building this container.
-    "ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:1": {}
+    // Chicken-and-egg on a brand-new repository: until the first publish there is
+    // nothing to pull at this coordinate, so run the "Publish features (manual)" workflow
+    // once — or use `pnpm devbase:local` — before building this container.
+    "ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:2": {}
   },
 
   "customizations": {
