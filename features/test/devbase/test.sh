@@ -252,14 +252,23 @@ check "banner reports the OS" bash -c 'cd /tmp && devbase-env-info | grep -qi "u
 check "config.env parses as shell" sh -n /usr/local/share/devbase/config.env
 
 # --- dependsOn -----------------------------------------------------------------
-# Neither of these is listed by this test's feature set, so their presence is entirely
-# the manifest's `dependsOn` doing its job. Asserting the binaries rather than the
-# manifest is the point: `installsAfter` would parse identically and install neither,
-# and the resulting container looks fine until the credential helper needs `gh`.
+# gh is not listed by this test's feature set, so its presence is entirely the manifest's
+# `dependsOn` doing its job. Asserting the binary rather than the manifest is the point:
+# `installsAfter` would parse identically and install nothing, and the resulting container
+# looks fine until the credential helper needs `gh`.
 check "dependsOn installed the gh CLI" command -v gh
-# -l so a PATH addition made in the login profile is picked up the way a real shell
-# would pick it up.
-check "dependsOn installed the claude CLI" bash -lc 'command -v claude'
+
+# The mirror image, and the reason it is asserted rather than simply dropped: devbase used
+# to pull the Claude Code CLI in through `dependsOn`, and 2.0.0 stopped. The VS Code
+# extension ships and runs its own runtime — `resources/native-binary/claude` inside the
+# extension directory — so the npm-installed global CLI was a second, redundant copy, and
+# being installed as root inside a user-owned global npm tree it could not even update
+# itself (`claude update` failed until someone chowned it by hand).
+#
+# A removal with no assertion is indistinguishable from a removal that quietly came back
+# through a transitive dependency, which is exactly what `dependsOn` does. -l so a PATH
+# addition made in the login profile is picked up the way a real shell would pick it up.
+check "devbase installs no Claude CLI of its own" bash -lc '! command -v claude'
 
 # --- setup.sh steps, asserted as effects -------------------------------------
 # These steps are what the Feature is for, and until now only the *recording* of their

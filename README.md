@@ -22,12 +22,12 @@ Add one entry to your repository's `.devcontainer/devcontainer.json`:
 }
 ```
 
-Only the second line is strictly required. `devbase` declares `node` (at `lts`),
-`github-cli` and `claude-code` in `dependsOn`, so it installs all three itself, before
-itself. The `node` entry above is kept because it deduplicates with `devbase`'s own — same
-feature, same options, one install — and it documents the runtime at the point people look
-for it. Other runtimes (php, go, python, java) are genuinely yours: `devbase` installs
-none of those and only orders itself after them.
+Only the second line is strictly required. `devbase` declares `node` (at `lts`) and
+`github-cli` in `dependsOn`, so it installs both itself, before itself. The `node` entry
+above is kept because it deduplicates with `devbase`'s own — same feature, same options,
+one install — and it documents the runtime at the point people look for it. Other runtimes
+(php, go, python, java) are genuinely yours: `devbase` installs none of those and only
+orders itself after them.
 
 Rebuild the container. That is the whole integration for a repository whose defaults
 are fine.
@@ -45,6 +45,7 @@ instead — the frames come with this entry already in place.
 - [Migrating a repository that already has a devcontainer](#migrating-a-repository-that-already-has-a-devcontainer)
 - [Developing a Feature](#developing-a-feature)
 - [Publishing](#publishing)
+- [Migrating to 2.0.0](#migrating-to-200)
 - [Keeping consumers up to date](#keeping-consumers-up-to-date)
 - [Troubleshooting](#troubleshooting)
 
@@ -55,14 +56,26 @@ language runtime of its own** — php, go, python and java stay in each reposito
 list, and `devbase` declares `installsAfter` for them so its setup steps run once those
 runtimes exist. Node is the exception, and a deliberate one: see below.
 
-Three features it does _not_ leave to the consumer, declared in `dependsOn` rather than
+Two features it does _not_ leave to the consumer, declared in `dependsOn` rather than
 `installsAfter`: **`github-cli`**, because the `gh` credential helper below is useless
-without `gh`; **`claude-code`**, because it is on every one of our machines anyway; and
-**`node` at `lts`**, because `devbase`'s own pnpm and commitizen steps need npm, and
-because `claude-code` installs **Node 18 from nodesource** — EOL since April 2025 — when it
-cannot find a Node of its own. `installsAfter` is only a hint: it orders a feature the
-consumer already listed and does nothing when they did not, so it could never have carried
-these three.
+without `gh`; and **`node` at `lts`**, because `devbase`'s own pnpm, commitizen and
+npm-floor steps need npm. `installsAfter` is only a hint: it orders a feature the consumer
+already listed and does nothing when they did not, so it could never have carried either.
+
+> **`claude-code` was a third, until 2.0.0 removed it.** It was there "because it is on
+> every one of our machines anyway", and that turned out to be the whole of the reason —
+> nothing in this Feature, and nothing in any consuming repository's scripts or workflows,
+> ever called the `claude` CLI. Meanwhile the VS Code extension ships and runs its own
+> runtime (`resources/native-binary/claude`, inside the extension directory), so the
+> npm-installed global was a second copy of the same thing — and, being installed as root
+> into a global npm tree the node feature makes user-owned, a copy that could not update
+> itself: `claude update` failed until someone chowned it by hand. See
+> [Migrating to 2.0.0](#migrating-to-200).
+>
+> It also used to be half the reason `node` is a dependency: `claude-code` installs
+> **Node 18 from nodesource** — EOL since April 2025 — when it cannot find a Node of its
+> own. That reason retires with it. The other half stands unchanged, which is why `node`
+> stays.
 
 > **On the Node pin.** Keep `"ghcr.io/devcontainers/features/node:2": { "version": "lts" }`
 > in your `devcontainer.json` if it is already there — identical options deduplicate, so it
@@ -511,6 +524,49 @@ escape hatch for the first publish and for re-publishing.
 private, and a private Feature fails every consumer's build with a `401`. Set it under
 this repository's _Packages_ → the `devbase` package → _Package settings_ → _Change
 visibility_.
+
+## Migrating to 2.0.0
+
+**What changed:** `devbase` no longer declares
+`ghcr.io/anthropics/devcontainer-features/claude-code:1` in `dependsOn`, so a container
+built from `2.x` has no `claude` on `PATH` unless the repository asks for it. (RSRMID-3053)
+
+**Why:** the Claude Code VS Code extension ships and runs its own runtime, at
+`resources/native-binary/claude` inside the extension directory — verified by process
+list in a running container, not inferred. The npm-installed global was therefore a second
+copy of the same thing, and one that could not update itself: the `claude-code` feature
+installs as root into a global npm tree the node feature makes `vscode:nvm`, so the package
+directory lands root-owned at mode 755 and `claude update` fails for the remote user until
+someone runs `sudo chown -R vscode:nvm "$(npm root -g)/@anthropic-ai"` by hand.
+
+**What you have to do.** Because consumers pin `devbase:1`, `2.0.0` reaches nobody on a
+rebuild — the upgrade is deliberate, in two steps:
+
+1. Change the reference in `.devcontainer/devcontainer.json` from `devbase:1` to
+   `devbase:2`.
+2. If the repository commits a `devcontainer-lock.json`, re-resolve it. Neither
+   `devcontainer upgrade` nor Dependabot will do this for you — see
+   [Keeping consumers up to date](#keeping-consumers-up-to-date) for why, and for the
+   commands.
+
+**What you do _not_ lose.** `gh`, `node` at `lts`, `pnpm` and the RTK binary are all
+unchanged, as are the `anthropic.claude-code` and `anthropic.claude-vscode` VS Code
+extensions — which are now the only Claude Code in the container. RTK in particular still
+matters: its `PreToolUse` hook lives in the bind-mounted, host-shared
+`~/.claude/settings.json` and fires under the extension's runtime exactly as it did under
+the CLI's, so a container without the binary still exits 127 on every Bash call.
+
+**If you actually want the CLI in a container**, list the feature yourself:
+
+```jsonc
+"features": {
+  "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
+  "ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:2": {}
+}
+```
+
+That is a deliberate, per-repository choice rather than something every image carries. Note
+it brings the ownership problem above back with it.
 
 ## Keeping consumers up to date
 
