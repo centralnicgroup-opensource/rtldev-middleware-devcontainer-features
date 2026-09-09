@@ -1,3 +1,23 @@
+# [2.0.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.7.1...v2.0.0) (2026-09-09)
+
+
+### Features
+
+* **devbase:** stop installing the Claude Code CLI ([d2374e7](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/d2374e7c1bb20c69eee4cbfcb7c07335c9b5a783))
+
+
+### BREAKING CHANGES
+
+* **devbase:** devbase no longer installs the Claude Code CLI. A container
+built from 2.x has no `claude` on PATH unless the repository lists
+ghcr.io/anthropics/devcontainer-features/claude-code:1 itself. The Claude Code
+VS Code extension is unaffected — it runs its own bundled runtime. Consumers
+pin devbase:1, so this reaches nobody until they change that reference to
+devbase:2 and re-resolve any committed devcontainer-lock.json; see "Migrating
+to 2.0.0" in README.md.
+
+Refs RSRMID-3053.
+
 ## [1.7.1](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.7.0...v1.7.1) (2026-09-08)
 
 
