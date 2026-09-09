@@ -27,9 +27,12 @@
   "features": {
     // Needed to run `pnpm features:test` from inside this container.
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-    // node, github-cli and claude-code come from devbase's `dependsOn` — see the default
-    // config. Here they exercise it straight from the working-tree copy, which is why this
-    // list can shrink without waiting for a release the way the default one must.
+    // node and github-cli come from devbase's `dependsOn` — see the default config. Here
+    // they exercise it straight from the working-tree copy, which is why this list can
+    // shrink without waiting for a release the way the default one must. That also means
+    // this config is where the claude-code removal takes effect first: unlike the default
+    // frame, it has no published `:1` to keep the CLI alive, so a container built here has
+    // no `claude` on PATH as soon as the working tree drops it.
     "./devbase": {}
   },
 
