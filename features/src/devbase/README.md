@@ -7,7 +7,7 @@ Shared devcontainer behaviour for RTLDEV middleware repositories: zsh with the t
 
 ```json
 "features": {
-    "ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:1": {}
+    "ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:2": {}
 }
 ```
 
