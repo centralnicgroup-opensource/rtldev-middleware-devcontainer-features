@@ -18,7 +18,7 @@ Add one entry to your repository's `.devcontainer/devcontainer.json`:
 ```jsonc
 "features": {
   "ghcr.io/devcontainers/features/node:2": { "version": "lts" },
-  "ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:1": {}
+  "ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:2": {}
 }
 ```
 
@@ -202,7 +202,7 @@ All optional; the defaults are what php-sdk and mcp-dis want.
 A stack elaborate enough to own its own setup turns the generic part off:
 
 ```jsonc
-"ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:1": {
+"ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:2": {
   "installProjectDependencies": false,
   "timezone": "Europe/London"
 }
@@ -431,7 +431,7 @@ precisely so its `"./devbase"` resolves inside `.devcontainer/` and is accepted.
 
 ### First publish
 
-Until `devbase:1` has been published once there is nothing for the default config to pull.
+Until `devbase` has been published once there is nothing for the default config to pull.
 Run the **Publish features (manual)** workflow once, or use `pnpm devbase:local`, before
 building the default container on a fresh repository.
 
@@ -571,7 +571,9 @@ it brings the ownership problem above back with it.
 ## Keeping consumers up to date
 
 **A consumer with no `devcontainer-lock.json` needs nothing.** Every rebuild re-resolves
-`devbase:1` to the newest `1.x`, so a release reaches them by rebuilding. That is the
+`devbase:2` to the newest `2.x`, so a release reaches them by rebuilding — a **minor or
+patch** release, that is; a major changes the tag and is the deliberate step described in
+[Migrating to 2.0.0](#migrating-to-200). That is the
 propagation story the copied-files approach never had — and for most consumers it is the
 whole story.
 
@@ -582,8 +584,8 @@ two mechanisms you would expect does it for them:
   its reference is re-emitted unchanged, and `1.2.0` satisfies `:1` just as well as
   `1.4.0` does, so the command is a no-op for exactly the case you want it for.
 - Dependabot's `devcontainers` ecosystem bumps **version references in
-  `devcontainer.json`**. A frame that references the moving tag `devbase:1` has no
-  reference to bump, so no PR is ever raised. This repository has that ecosystem
+  `devcontainer.json`**. A frame that references a moving major tag such as `devbase:2`
+  has no reference to bump, so no PR is ever raised. This repository has that ecosystem
   configured and has never received a devcontainers PR, while receiving them for
   `github-actions` and `npm` — the updater works, it simply has nothing to say about `:1`.
 
@@ -591,7 +593,7 @@ The result is a lock that silently stays put: this repository's own pinned `1.2.
 four releases. To move it, drop the entry and re-resolve:
 
 ```sh
-jq 'del(.features["ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:1"])' \
+jq 'del(.features["ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:2"])' \
   .devcontainer/devcontainer-lock.json > /tmp/lock && mv /tmp/lock .devcontainer/devcontainer-lock.json
 npx devcontainer upgrade --workspace-folder .
 npx prettier --write .devcontainer/devcontainer-lock.json
