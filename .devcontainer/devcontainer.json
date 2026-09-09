@@ -26,10 +26,12 @@
   // looks right — a symptom that points at git rather than at this line.
   //
   // ~/.claude is a directory either way, so its `mkdir` is about ownership rather than
-  // shape: the one Docker creates is owned by root, and claude-code — which devbase
-  // pulls in via `dependsOn` — then cannot write its own config in the container. It has
-  // to stay in step with the .claude mount below; dropping it while the mount remained
-  // is exactly what the .ssh cleanup did.
+  // shape: the one Docker creates is owned by root, and Claude Code then cannot write its
+  // own config or session state in the container. Still needed after 2.0.0 dropped the
+  // claude-code CLI from devbase's `dependsOn` — the VS Code extension writes to the same
+  // directory, and the RTK hook is read from the settings.json inside it. It has to stay
+  // in step with the .claude mount below; dropping it while the mount remained is exactly
+  // what the .ssh cleanup did.
   //
   // ~/.zsh_history needs the same `touch` as ~/.gitconfig and for the same reason: it is
   // bound as a single file since RSRMID-3052, and a missing source becomes a root-owned
@@ -42,11 +44,17 @@
     // and you are back to pushing a branch to find out whether a change works.
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
 
-    // node, github-cli and claude-code are deliberately NOT listed: devbase declares all
-    // three in `dependsOn` and pulls them in itself — node at lts, which is the Node the
+    // node and github-cli are deliberately NOT listed: devbase declares both in
+    // `dependsOn` and pulls them in itself — node at lts, which is the Node the
     // devcontainer CLI and prettier run on. Leaving them out is what makes this container
     // a check of that guarantee rather than a config that would still have `gh` and a Node
     // of its own if the dependency silently stopped resolving.
+    //
+    // claude-code used to be a third. 2.0.0 dropped it (RSRMID-3053): the VS Code
+    // extension runs its own bundled runtime, so the npm global was a redundant second
+    // copy that could not even update itself. This frame still references `devbase:1`
+    // below, so it keeps the CLI until that reference moves to `:2` — after which there is
+    // deliberately no `claude` on PATH here.
     //
     // Every removal from this list is a bet that the *published* Feature already provides
     // it, because this list resolves devbase:1 from the registry. Dropping github-cli once
