@@ -96,13 +96,17 @@ environment.
   sequences a feature the consumer already listed and does nothing when they did not, so
   it suits the language runtimes — devbase must not install those, only run after them. A
   new language runtime that post-create depends on goes there. `dependsOn` actually pulls
-  the feature in, and carries `github-cli` (the credential helper is useless without
-  `gh`) and `claude-code`. Adding to `dependsOn` puts software in every consumer's image
-  with no option to decline, so it is a `feat(devbase)` and needs a test asserting the
-  binary — never list the same feature in both. Check what a dependency drags in before
-  adding one: `claude-code` installs its own Node when it finds none, and that fallback is
-  **EOL 18 from nodesource** — which is why `node` is a dependency too, and why removing it
-  would silently put every repository that does not list its own on a dead runtime.
+  the feature in, and carries `github-cli` (the credential helper is useless without `gh`)
+  and `node` (devbase's own pnpm, commitizen and npm-floor steps need npm). Adding to
+  `dependsOn` puts software in every consumer's image with no option to decline, so it is a
+  `feat(devbase)` and needs a test asserting the binary — never list the same feature in
+  both. **Removing** one is a major, and needs a test asserting the binary is _absent_, or
+  nothing distinguishes a removal from one that quietly came back through another feature's
+  own `dependsOn`. Check what a dependency drags in before adding one, and what its removal
+  takes with it: `claude-code` was dropped in 2.0.0 (RSRMID-3053) because the VS Code
+  extension runs its own bundled runtime, and that also retired one of the two reasons
+  `node` is here — `claude-code` installed **EOL Node 18 from nodesource** when it found no
+  Node. The other reason stands, so `node` stayed.
 - **`node` is in `dependsOn` at `lts`, and that makes devbase the owner of the Node
   version.** It rests on one CLI behaviour: two instances of a feature with _identical_
   options deduplicate, differing ones do not — both install and the dependency-expanded
@@ -345,8 +349,8 @@ Opus decides, Sonnet implements. Definitions live in `.claude/agents/`.
 ## Do NOT
 
 - Add a language runtime to `devbase` — runtimes come from the devcontainers language
-  features, and this Feature installs none directly (a Node does arrive transitively via
-  the `claude-code` dependency; that is a known side effect, not licence to add more)
+  features, and `node` is the sole exception, declared in `dependsOn` because devbase's own
+  npm-dependent steps need it. That is one deliberate exception, not licence to add more
 - Hand-edit `version` in `devcontainer-feature.json` — semantic-release owns it
 - File a behaviour change under a non-releasing commit type, which silently ships nothing
 - Repoint this repository's devcontainer **away from** the published coordinate — the

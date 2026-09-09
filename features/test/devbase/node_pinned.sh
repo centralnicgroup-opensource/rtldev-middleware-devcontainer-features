@@ -29,11 +29,13 @@ check "devbase's lts wins over a repository's own Node pin" bash -lc '
     node -v
     ! node -v | grep -q "^v22\."'
 
-# claude-code installs its own Node only when it cannot find one, and that fallback is
-# Node 18 from nodesource — EOL. With node in dependsOn it can never run, and this is what
-# would catch it starting to: the apt source exists if and only if that installer ran.
-check "claude-code added no Node of its own" bash -c \
-    '! test -e /etc/apt/sources.list.d/nodesource.list'
+# The nodesource guard that used to live here is gone with its subject. It existed because
+# claude-code installed Node 18 from nodesource — EOL — when it could not find a Node, and
+# it caught that installer starting to run. 2.0.0 dropped claude-code from dependsOn, so
+# nothing in the Feature can reach nodesource any more and the check could no longer fail.
+# A check that cannot fail is worse than no check: it reports SUCCESS and sends the next
+# reader somewhere else. `node` stays in dependsOn on its own merits — devbase's pnpm,
+# commitizen and npm-floor steps need npm — which the check above is what actually proves.
 
 # devbase's npm-dependent steps are the reason the dependency exists, so assert they
 # completed rather than reporting a missing toolchain.
