@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v2.0.0...v2.0.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **devbase:** drop Claude Code from the Feature description ([3a8b7f7](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/3a8b7f761199c98e658db8721c7e10f0a3f29f7f))
+
 # [2.0.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v1.7.1...v2.0.0) (2026-09-09)
 
 
