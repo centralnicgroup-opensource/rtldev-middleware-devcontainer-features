@@ -56,13 +56,13 @@
     "prettier:fix": "prettier --write ."
   },
   "devDependencies": {
-    "@devcontainers/cli": "^0.80.0",
+    "@devcontainers/cli": "^0.89.0",
     "@semantic-release/changelog": "^7.0.0",
     "@semantic-release/git": "^11.0.1",
-    "@team-internet/semantic-release-plugins": "^2.2.4",
+    "@team-internet/semantic-release-plugins": "^2.5.1",
     "husky": "^9.1.7",
-    "lint-staged": "^17.3.0",
-    "prettier": "^3.9.6",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.9",
     "semantic-release": "^25.0.9"
   },
   "lint-staged": {
