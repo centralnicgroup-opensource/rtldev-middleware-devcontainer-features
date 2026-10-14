@@ -287,7 +287,11 @@ artifact works.
   filing one under `chore` or `refactor` means it never reaches a consumer.
 - **Breaking changes:** `BREAKING CHANGE: <summary>` in the commit body after a blank
   line, plus a migration note in the README.
-- **Branch creation:** `git checkout main && git pull --ff-only` before `git checkout -b`.
+- **Branch creation:** before creating a branch, and again after any PR merges,
+  run `git checkout main && git pull --ff-only` first — it brings in the merged
+  commits and their release tags. Never branch from a stale local `main`, from
+  `origin/main` (it becomes the new branch's upstream) or from another feature
+  branch.
 - **Branch naming:** prefix with the Jira issue ID — `RSRMID-1234-short-description`.
 - **Pull requests:** include the Jira issue link; add the PR URL as a comment on the Jira
   issue after opening.
