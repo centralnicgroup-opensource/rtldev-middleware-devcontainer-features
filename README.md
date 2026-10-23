@@ -550,8 +550,8 @@ rebuild — the upgrade is deliberate, in two steps:
    commands.
 
 **What you do _not_ lose.** `gh`, `node` at `lts`, `pnpm` and the RTK binary are all
-unchanged, as are the `anthropic.claude-code` and `anthropic.claude-vscode` VS Code
-extensions — which are now the only Claude Code in the container. RTK in particular still
+unchanged, as is the `anthropic.claude-code` VS Code extension — which is now the only
+Claude Code in the container. RTK in particular still
 matters: its `PreToolUse` hook lives in the bind-mounted, host-shared
 `~/.claude/settings.json` and fires under the extension's runtime exactly as it did under
 the CLI's, so a container without the binary still exits 127 on every Bash call.
