@@ -1,3 +1,10 @@
+## [2.0.2](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v2.0.1...v2.0.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* **devbase:** drop the nonexistent anthropic.claude-vscode extension ([1049db9](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/1049db93a827d52ea1eea3266836983aa9ec9f42))
+
 ## [2.0.1](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v2.0.0...v2.0.1) (2026-09-09)
 
 
