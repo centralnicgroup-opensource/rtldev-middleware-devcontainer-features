@@ -13,7 +13,7 @@ commitizen, pnpm, the `gh` credential helper (and a persisted `gh` login), persi
 installation and the on-attach toolchain banner.
 
 - **Language:** shell (bash for build-time, zsh for the lifecycle hooks) plus JSON metadata
-- **Published coordinate:** `ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:1`
+- **Published coordinate:** `ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:2`
 - **Default branch:** `main`
 
 There is **no application code here.** Every change is to shell, container metadata, or
@@ -234,21 +234,20 @@ artifact works.
   of `pnpm lint`: the copy is gitignored and absent in CI.
 - `.devcontainer/env-info.conf` is also the reference example of that file: a change to the
   config format breaks here first.
-- **Both `devcontainer-lock.json` files are committed**, and that is a reversal — this
-  used to ship without one so each rebuild resolved the newest `1.x`. The lock pins digests
-  instead, so a rebuild no longer picks up a fresh release on its own — and **nothing else
-  picks it up either.** `devcontainer upgrade` only fills in _missing_ entries: an entry
-  that still satisfies `:1` is re-emitted unchanged, which `1.2.0` does. Dependabot's
-  `devcontainers` ecosystem (weekly, `/`) has never opened a PR here either — it bumps
-  version references in `devcontainer.json`, and this frame references the moving tag
-  `devbase:1`, which never needs bumping. The updater itself works: it raises PRs for
-  `github-actions` and `npm`. So the lock sat at `1.2.0` across the `1.2.1`, `1.2.2`,
-  `1.3.0` and `1.4.0` releases, and the dogfooding check it was supposed to trigger did
-  not happen. Moving it means deleting the entry (or the whole file) and re-resolving, then
-  `prettier --write` on the result because the CLI writes it with no trailing newline and
-  `pnpm lint` rejects that — see the README. **Do not read a green rebuild as proof the
-  newest release works**, and do not assume anything will move the pin for you: check which
-  digest the lock names, and move it by hand when the point is to test a release.
+- **Both `devcontainer-lock.json` files are committed** (`.devcontainer/` and
+  `.devcontainer/local/`), and that is a reversal — this used to ship without one so each
+  rebuild resolved the newest `1.x`. The lock pins digests, so a rebuild does not pick up a
+  fresh release on its own. **Dependabot's `devcontainers` ecosystem (weekly, `/`) does move
+  it**: it re-resolves the lock within the tag the frame names, as the lock-only PR moving
+  `2.0.0` to `2.0.1` against `devbase:2` showed. What it never does is change the tag
+  (`:1` to `:2`), and `devcontainer upgrade` alone moves nothing, because it only fills in
+  _missing_ entries. Do not repeat the older claim that Dependabot never moves a lock; it
+  was wrong. To move it by hand (a tag move, or testing a release now),
+  delete the devbase entry with `jq`, run `pnpm dlx @devcontainers/cli upgrade
+--workspace-folder .`, then `pnpm prettier:fix` because the CLI writes the file with no
+  trailing newline and `pnpm lint` rejects that — see the README. Never `npx`. **Do not
+  read a green rebuild as proof the newest release works**: check which digest the lock
+  names.
 - **Never make this frame rely on a guarantee that has not been released yet.** Because it
   consumes the registry, the frame is only ever as correct as the _published_ Feature. The
   moment `github-cli` was dropped from the feature list here, on the strength of a
@@ -277,7 +276,7 @@ artifact works.
   here: it has no bypass and would be rejected. (RSRMID-2994)
 - **The commit type is the release decision.** `fix(devbase)` is a patch,
   `feat(devbase)` a minor, either plus `BREAKING CHANGE:` a major; `ci`/`docs`/`chore`/
-  `test`/`refactor` publish nothing. Consumers pin `:1`, so a patch or minor reaches every
+  `test`/`refactor` publish nothing. Consumers pin `:2`, so a patch or minor reaches every
   repository on its next rebuild while a major does not — from the consumer's side, a
   removed or renamed option, or a changed default that alters what they already get, is a
   major.
@@ -295,11 +294,12 @@ artifact works.
 - **A gate over `needs.*.result` must test each result.** `grep -vw success` over the
   joined line passes whenever _any_ job succeeded, which is the opposite of what a gate
   is for.
-- **Consumers pin `:1`**, so a breaking change inside `1.x` reaches them on their next
+- **Consumers pin `:2`**, so a breaking change inside `2.x` reaches them on their next
   rebuild — immediately for a consumer with no `devcontainer-lock.json`, since that
-  re-resolves the newest `1.x` every time. A consumer who commits a lock stays on the
-  pinned digest until someone re-resolves it by hand, which is the opposite failure and
-  just as easy to misread (see Dogfooding). Treat the major as a real contract either way.
+  re-resolves the newest `2.x` every time. A consumer who commits a lock stays on the
+  pinned digest until it is re-resolved — by Dependabot, if the repository configures the
+  `devcontainers` ecosystem, otherwise by hand — which is the opposite failure and just as
+  easy to misread (see Dogfooding). Treat the major as a real contract either way.
 
 ## Git Conventions
 

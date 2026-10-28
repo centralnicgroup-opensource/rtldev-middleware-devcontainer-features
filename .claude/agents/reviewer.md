@@ -37,7 +37,7 @@ Review against, in rough order of severity:
    with nothing checking the effect.
 6. **Consumer contract.** A removed or renamed option, or a changed default that alters
    what an existing consumer already gets, without `BREAKING CHANGE:` and a migration
-   note. Consumers pin `:1`, so a minor or patch reaches them automatically — an
+   note. Consumers pin `:2`, so a minor or patch reaches them automatically — an
    unannounced behaviour change is the expensive mistake here.
 7. **Hand-edited `version`** in `devcontainer-feature.json`, which semantic-release owns
    and will either overwrite or collide with.

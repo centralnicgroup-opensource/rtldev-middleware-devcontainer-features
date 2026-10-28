@@ -261,9 +261,10 @@ A stack elaborate enough to own its own setup turns the generic part off:
 
 Two things worth knowing about consuming it:
 
-- **Pin the major (`:1`), not a patch.** A new `1.x` is picked up on the next rebuild,
+- **Pin the major (`:2`), not a patch.** A new `2.x` is picked up on the next rebuild,
   and the digest recorded in `devcontainer-lock.json` keeps the build reproducible in
-  between.
+  between. Dependabot keeps that lock current if you configure its `devcontainers`
+  ecosystem — see [Keeping consumers up to date](#keeping-consumers-up-to-date).
 - **Lifecycle order.** The Feature's `postCreateCommand` and `postAttachCommand` run
   _before_ the ones in your `devcontainer.json`, so your own hooks can rely on pnpm,
   the global packages and your dependencies already being installed. Put
@@ -556,7 +557,7 @@ call is not path-filtered, so a push that touches nothing under `features/` is t
 (`2.1.0` shipped with a bug because the release used to start without waiting for the
 tests, which only ran alongside it; RSRMID-2982.)
 
-| Commit                                  | Result for a consumer pinned to `:1`                  |
+| Commit                                  | Result for a consumer pinned to `:2`                  |
 | --------------------------------------- | ----------------------------------------------------- |
 | `fix(devbase): …`                       | patch — picked up on their next rebuild               |
 | `feat(devbase): …`                      | minor — picked up on their next rebuild               |
@@ -607,10 +608,11 @@ rebuild — the upgrade is deliberate, in two steps:
 
 1. Change the reference in `.devcontainer/devcontainer.json` from `devbase:1` to
    `devbase:2`.
-2. If the repository commits a `devcontainer-lock.json`, re-resolve it. Neither
-   `devcontainer upgrade` nor Dependabot will do this for you — see
-   [Keeping consumers up to date](#keeping-consumers-up-to-date) for why, and for the
-   commands.
+2. If the repository commits a `devcontainer-lock.json`, re-resolve it. Dependabot moves
+   a lock within the tag it already names, but it never changes the tag itself, so the
+   `:1` to `:2` edit in step 1 is yours to make, and so is dropping the old lock entry
+   and re-resolving — see [Keeping consumers up to date](#keeping-consumers-up-to-date)
+   for the commands.
 
 **What you do _not_ lose.** `gh`, `node` at `lts`, `pnpm` and the RTK binary are all
 unchanged, as is the `anthropic.claude-code` VS Code extension — which is now the only
@@ -636,40 +638,53 @@ it brings the ownership problem above back with it.
 **A consumer with no `devcontainer-lock.json` needs nothing.** Every rebuild re-resolves
 `devbase:2` to the newest `2.x`, so a release reaches them by rebuilding — a **minor or
 patch** release, that is; a major changes the tag and is the deliberate step described in
-[Migrating to 2.0.0](#migrating-to-200). That is the
-propagation story the copied-files approach never had — and for most consumers it is the
-whole story.
+[Migrating to 2.0.0](#migrating-to-200). That is the propagation story the copied-files
+approach never had — and for most consumers it is the whole story.
 
-**A consumer that commits a lock has to move the pin deliberately**, and neither of the
-two mechanisms you would expect does it for them:
+**A consumer that commits a lock stays on the pinned digest until something re-resolves
+it, and that something is Dependabot, if the repository asks for it.** Add the
+`devcontainers` ecosystem to `.github/dependabot.yml`:
 
-- `devcontainer upgrade` only fills in _missing_ entries. An entry that still satisfies
-  its reference is re-emitted unchanged, and `1.2.0` satisfies `:1` just as well as
-  `1.4.0` does, so the command is a no-op for exactly the case you want it for.
-- Dependabot's `devcontainers` ecosystem bumps **version references in
-  `devcontainer.json`**. A frame that references a moving major tag such as `devbase:2`
-  has no reference to bump, so no PR is ever raised. This repository has that ecosystem
-  configured and has never received a devcontainers PR, while receiving them for
-  `github-actions` and `npm` — the updater works, it simply has nothing to say about `:1`.
+```yaml
+- package-ecosystem: "devcontainers"
+  directory: "/"
+  schedule:
+    interval: "weekly"
+  groups:
+    devcontainers:
+      patterns:
+        - "*"
+```
 
-The result is a lock that silently stays put: this repository's own pinned `1.2.0` through
-four releases. To move it, drop the entry and re-resolve:
+Dependabot then re-resolves `devcontainer-lock.json` and opens a PR when a newer release
+satisfies the tag the frame already names. The PR is a lock-only change, and it covers
+every Feature in the file, not just `devbase`. Two PRs show it: a lock-only move of `devbase`
+`1.3.0` to `1.5.0` against `devbase:1` in the PHP SDK, and `2.0.0` to `2.0.1` against
+`devbase:2` in this repository. Without that entry nothing moves the pin, and the lock
+sits still at whatever digest was last resolved.
+
+What Dependabot does **not** do is change the tag. Moving from `devbase:1` to `devbase:2`
+stays a deliberate edit to `devcontainer.json`, followed by a manual re-resolve (below).
+
+`devcontainer upgrade` alone is not a way to move a pin: it only fills in _missing_
+entries, and an entry that still satisfies its reference is re-emitted unchanged — `1.2.0`
+satisfies `:1` just as well as `1.4.0` does. Deleting the entry first is the step that
+matters. To re-resolve by hand, for a tag move or to test a release right now:
 
 ```sh
 jq 'del(.features["ghcr.io/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/devbase:2"])' \
-  .devcontainer/devcontainer-lock.json > /tmp/lock && mv /tmp/lock .devcontainer/devcontainer-lock.json
-npx devcontainer upgrade --workspace-folder .
-npx prettier --write .devcontainer/devcontainer-lock.json
+  .devcontainer/devcontainer-lock.json > /tmp/lock.json && cp /tmp/lock.json .devcontainer/devcontainer-lock.json
+pnpm dlx @devcontainers/cli upgrade --workspace-folder .
 ```
 
-Deleting the whole lock instead re-resolves every feature, which is fine but a wider diff.
-The `prettier` line is not optional: the CLI writes the lock with no trailing newline and
-`pnpm lint` rejects it.
+Then format the file with your repository's formatter (e.g. `pnpm prettier:fix` where that
+script exists); the CLI writes the lock with no trailing newline.
 
-**If you want Dependabot to do this for you, reference a precise version** —
-`devbase:1.4.0` rather than `devbase:1` — and accept a PR per release instead of a moving
-major. That is a real trade: the moving tag is what makes a patch reach every repository
-without ceremony.
+Other entries in the lock may move within their own ranges in the same pass, so read the
+diff. Deleting the whole lock instead re-resolves every Feature, which is a wider diff
+for the same result. The formatting step is not optional: the CLI writes the lock with no
+trailing newline and `pnpm lint` rejects it. (Use `pnpm dlx`, never `npx`: this
+repository installs with pnpm.)
 
 ## Troubleshooting
 
