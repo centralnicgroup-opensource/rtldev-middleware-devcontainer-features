@@ -189,6 +189,12 @@ chmod 0644 "${SHARE_DIR}"/*.sh
 # the image's content at the mount target, ownership and mode included. Without this the
 # volume comes up root-owned and `gh auth login` dies with "permission denied". Mode 0700:
 # it holds an OAuth token.
+#
+# Necessary but not sufficient. The devcontainer CLI's updateRemoteUserUID layer remaps the
+# remote user to the host's UID and re-owns only $HOME, so on a host whose UID is not the
+# image's this directory stays owned by the old UID and the volume inherits it.
+# devbase_setup_gh_config_dir repairs that at post-create; this still covers the common
+# case where no remap happens.
 GH_CONFIG_DIR_PATH="/var/lib/devbase/gh"
 echo "devbase: creating ${GH_CONFIG_DIR_PATH} for the gh login volume"
 install -d -m 0700 -o "${USERNAME}" -g "${USERNAME}" "${GH_CONFIG_DIR_PATH}"

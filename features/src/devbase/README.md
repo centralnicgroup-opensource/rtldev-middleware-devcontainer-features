@@ -173,11 +173,16 @@ The Feature now keeps the login in a **per-container named volume**:
 - **Reset:** remove the volume while the container is gone —
   `docker volume rm devbase-gh-<devcontainerId>` — and rebuild.
 
-**Ownership failure.** Docker copies the image's ownership into a volume only when the
-volume is _empty_. `install.sh` creates the directory owned by the remote user, so a fresh
-volume is writable. A volume that already existed with another owner stays that way, and
-post-create then reports `GH_CONFIG_DIR ... is missing or not writable`. Fix it with
-`sudo chown -R "$(id -un)" /var/lib/devbase/gh`, or remove the volume and rebuild.
+**Ownership.** The volume has to be writable by the remote user, and post-create repairs
+that on every create with `sudo -n chown` of the directory (the devcontainers base images
+grant passwordless sudo). It is needed because the Dev Containers CLI remaps the remote user
+to the host's UID when it differs from the image's (any Linux host whose UID is not 1000,
+GitHub runners included) and re-owns only the home directory, so a directory `install.sh`
+created at build time keeps the old owner and a fresh volume inherits it. Docker also seeds
+ownership only into an _empty_ volume, so a volume that already existed keeps its old owner.
+Where sudo is missing or wants a password, post-create reports
+`GH_CONFIG_DIR ... could not be repaired` and carries on; fix it with
+`sudo chown "$(id -u):$(id -g)" /var/lib/devbase/gh`, or remove the volume and rebuild.
 
 **No option switches the volume off**, and that includes `ghCredentialHelper: false`:
 `mounts` and `containerEnv` are static JSON with no option substitution, so a flag could
