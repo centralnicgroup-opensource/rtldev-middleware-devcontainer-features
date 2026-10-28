@@ -5,12 +5,11 @@ name: Test features
       - "features/**"
       - ".github/workflows/test-features.yml"
       - "scripts/test-gh-rebuild.sh"
-  push:
-    branches:
-      - main
-    paths:
-      - "features/**"
-      - "scripts/test-gh-rebuild.sh"
+  # Called by release.yml, which gates the release on these tests. There is no push
+  # trigger: a push to main runs them through that call, and a second trigger here
+  # would run them twice. The call is not path-filtered, so a releasing push that
+  # touches nothing under features/ is tested too.
+  workflow_call:
   workflow_dispatch:
 
 permissions:

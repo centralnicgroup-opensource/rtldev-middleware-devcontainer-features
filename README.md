@@ -1,6 +1,6 @@
 # rtldev-middleware-devcontainer-features
 
-[![Test features](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/actions/workflows/test-features.yml/badge.svg)](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/actions/workflows/test-features.yml)
+[![Release](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/actions/workflows/release.yml/badge.svg)](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 Shared [devcontainer Features](https://containers.dev/implementors/features/) for RTLDEV
@@ -549,7 +549,12 @@ Releases are **semantic-release**, driven by commit type — nobody edits `versi
 `devcontainer-feature.json` by hand. On a push to `main`,
 [`release.yml`](.github/workflows/release.yml) works out the next version from the
 commits, writes it into the Feature metadata, commits and tags it, and publishes to
-`ghcr.io` in the same run.
+`ghcr.io` in the same run — but only after the feature tests and lint have passed in that
+same run. Both are called from `release.yml` as reusable workflows and the `release` job
+`needs` them, so a red check stops the run before anything is tagged or published. The
+call is not path-filtered, so a push that touches nothing under `features/` is tested too.
+(`2.1.0` shipped with a bug because the release used to start without waiting for the
+tests, which only ran alongside it; RSRMID-2982.)
 
 | Commit                                  | Result for a consumer pinned to `:1`                  |
 | --------------------------------------- | ----------------------------------------------------- |

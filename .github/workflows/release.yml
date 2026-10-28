@@ -28,8 +28,23 @@ concurrency:
 # `push` would never fire for exactly the commit that matters. Publishing in the same
 # job, after semantic-release has run, is what makes the bumped version the one that
 # reaches ghcr.io.
+#
+# The release is gated on the feature tests and lint, which are called as reusable
+# workflows rather than re-implemented here. 2.1.0 shipped with a bug the tests caught
+# only after the merge, because this job used to start without waiting for them
+# (RSRMID-2982). Neither callee needs a secret or more than `contents: read`, so none is
+# passed. `release` is the only job that writes, and the gate jobs run first, so a red
+# check stops the run before anything is tagged, pushed or published. The concurrency
+# group above covers the whole workflow, gate jobs included.
 jobs:
+  test:
+    uses: ./.github/workflows/test-features.yml
+
+  lint:
+    uses: ./.github/workflows/lint.yml
+
   release:
+    needs: [test, lint]
     runs-on: ubuntu-latest
     permissions:
       contents: write # semantic-release commits the version bump and creates the release

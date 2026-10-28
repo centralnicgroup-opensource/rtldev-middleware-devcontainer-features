@@ -265,6 +265,11 @@ artifact works.
   pushes it over SSH with the release deploy key, and a deploy-key push triggers
   workflows no more than the `GITHUB_TOKEN` push it replaced did, so a separate publish
   workflow on `push` would never fire for the one commit that matters.
+- **The release is gated on the feature tests and lint**, called from `release.yml` as
+  reusable workflows (`release` has `needs: [test, lint]`). Neither has a `push` trigger
+  of its own any more — a second one would run them twice on main. Keep their
+  `pull_request` triggers as they are: the default-branch ruleset requires the `Lint`
+  check by name (`Lint: completed`), and that name comes from the `pull_request` run.
 - **Both pushes to `main` in the release job go over the deploy key** — the release
   commit and the regenerated feature documentation. The default-branch ruleset names
   `DeployKey` as its only bypass actor, so the job rewrites `origin` to the `git@` form
