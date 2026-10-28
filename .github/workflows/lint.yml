@@ -5,9 +5,10 @@ name: Lint
       - opened
       - synchronize
       - reopened
-  push:
-    branches:
-      - main
+  # Called by release.yml, which gates the release on lint. There is no push trigger: a
+  # push to main runs lint through that call, and a second trigger here would run it
+  # twice.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
