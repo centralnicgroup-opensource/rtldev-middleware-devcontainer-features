@@ -59,8 +59,8 @@ main() {
     fi
 
     # Unconditional, unlike the helper above: the gh login volume is declared in the
-    # manifest and mounts whatever the option says, so its ownership is checked regardless.
-    devbase_check_gh_config_dir
+    # manifest and mounts whatever the option says, so its ownership is repaired regardless.
+    devbase_setup_gh_config_dir
 
     if [ "${DEVBASE_SSH_COMMIT_SIGNING:-true}" = "true" ]; then
         devbase_setup_ssh_commit_signing

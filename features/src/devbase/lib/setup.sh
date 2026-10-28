@@ -502,36 +502,64 @@ devbase_setup_gh_credential_helper() {
     fi
 }
 
-# devbase_check_gh_config_dir — verify the gh login volume is usable by this user.
+# _devbase_dir_writable <dir> — true only when a file can really be created in dir.
+#
+# A write probe rather than `[ -w ]`: -w says nothing about a read-only mount or a full
+# disk, and is always true for root.
+_devbase_dir_writable() {
+    local probe
+    [ -d "$1" ] || return 1
+    probe="$(mktemp "$1/.devbase-probe.XXXXXX" 2>/dev/null)" || return 1
+    rm -f "${probe}"
+}
+
+# devbase_setup_gh_config_dir — make the gh login volume writable by this user, repairing
+# its ownership when it is not.
 #
 # The manifest mounts a named volume at GH_CONFIG_DIR so the gh login survives a rebuild.
-# install.sh creates the mount target owned by the remote user, and Docker copies that
-# ownership into an *empty* volume — but only an empty one. A volume that already existed
-# (an earlier devbase, another user, a manual `docker run`) keeps whatever owner it had, and
-# then `gh auth login` fails with "permission denied" far from the cause. Unconditional,
-# like the volume itself: it does not depend on ghCredentialHelper.
+# install.sh creates the mount target owned by the remote user, but that is not enough, and
+# the main reason is the devcontainer CLI's updateRemoteUserUID layer: when the host UID
+# differs from the image's (any Linux host whose UID is not 1000, which includes GitHub
+# runners at 1001) it remaps the remote user to the host UID and re-owns only $HOME. A
+# directory created at build time stays owned by the old UID, Docker seeds the new volume
+# with that owner, and `gh auth login` then fails with "permission denied" far from the
+# cause. The second cause is that Docker seeds ownership only into an *empty* volume, so a
+# volume that already existed keeps whatever owner it had.
 #
-# Report-and-skip: never sudo, never fatal. Success is logged only after a real write, since
-# `[ -w ]` says nothing about a read-only mount or a full disk.
-devbase_check_gh_config_dir() {
+# Hence a repair rather than a check, run on every create and so on every rebuild. It uses
+# `sudo -n` because the devcontainers base images grant the remote user passwordless sudo;
+# without sudo, or when sudo wants a password, it reports and skips. Only the directory is
+# chowned, not its contents: the directory is what blocks gh, and files inside were written
+# by the same user on the same host. Unconditional, like the volume itself: it does not
+# depend on ghCredentialHelper. Never fatal, and success is logged only after a second
+# write probe.
+devbase_setup_gh_config_dir() {
     local dir="${GH_CONFIG_DIR:-}"
     if [ -z "${dir}" ]; then
         log_detail "GH_CONFIG_DIR is not set — gh keeps its login in ~/.config/gh"
         return 0
     fi
 
-    local probe=""
-    if [ -d "${dir}" ] && [ -w "${dir}" ]; then
-        probe="$(mktemp "${dir}/.devbase-probe.XXXXXX" 2>/dev/null)" || probe=""
-    fi
-
-    if [ -z "${probe}" ]; then
-        log_error "GH_CONFIG_DIR ${dir} is missing or not writable by $(id -un) — the gh login cannot be saved. Likely the volume devbase-gh-<devcontainerId> already existed with another owner (Docker sets ownership only on an empty volume). Fix: sudo chown -R \"$(id -un)\" ${dir}, or remove that volume and rebuild"
+    if _devbase_dir_writable "${dir}"; then
+        log_success "gh config directory ${dir} is writable by $(id -un)"
         return 0
     fi
 
-    rm -f "${probe}"
-    log_success "gh config directory ${dir} is writable by $(id -un)"
+    local old_uid="" repaired=false
+    if [ -d "${dir}" ] && command_exists sudo; then
+        old_uid="$(stat -c %u "${dir}" 2>/dev/null || true)"
+        sudo -n chown "$(id -u):$(id -g)" "${dir}" 2>/dev/null || true
+        sudo -n chmod 0700 "${dir}" 2>/dev/null || true
+        _devbase_dir_writable "${dir}" && repaired=true
+    fi
+
+    if [ "${repaired}" = "true" ]; then
+        log_success "gh config directory ${dir} was owned by uid ${old_uid:-unknown}; repaired to $(id -u) ($(id -un))"
+        return 0
+    fi
+
+    log_error "GH_CONFIG_DIR ${dir} is missing or not writable by $(id -un) and could not be repaired (needs passwordless sudo, and a writable mount) — the gh login cannot be saved. Fix: sudo chown \"$(id -u):$(id -g)\" ${dir} && sudo chmod 0700 ${dir}, or remove the volume devbase-gh-<devcontainerId> and rebuild"
+    return 0
 }
 
 # devbase_check_gh_login — warn on attach when gh holds no login.

@@ -353,9 +353,12 @@ check "GH_CONFIG_DIR points at the devbase gh volume path" \
 check "the gh config directory is a mount, not just a directory" \
     bash -c 'grep -qF " /var/lib/devbase/gh " /proc/self/mountinfo'
 
-# Writable by the remote user, proven by writing. This is the ownership failure the
-# install.sh `install -d -o` exists for: a root-owned volume makes `gh auth login` fail with
-# "permission denied", and nothing before this check would have noticed.
+# Writable by the remote user, proven by writing, on the real volume. install.sh creates the
+# directory owned by the build-time user, but the CLI's updateRemoteUserUID layer remaps that
+# user to the host UID (1001 on GitHub runners) and re-owns only $HOME, so the volume is
+# seeded with a stale owner and `gh auth login` would fail with "permission denied". It
+# passes because post-create's devbase_setup_gh_config_dir repaired the ownership, which
+# makes this the end-to-end check on a remapped-UID host.
 check "the gh config directory is writable by the remote user" bash -c '
     set -e
     probe="${GH_CONFIG_DIR}/.test-probe"
@@ -381,16 +384,34 @@ check "a logged-in gh is not warned about" bash -c '
     out="$(env -u GITHUB_TOKEN -u CI -u GITHUB_ACTIONS GH_TOKEN=dummy GH_CONFIG_DIR="$(mktemp -d)" bash -c ". /usr/local/share/devbase/setup.sh; devbase_check_gh_login" 2>&1)"
     ! printf "%s" "${out}" | grep -qF "gh auth login"'
 
-# The ownership failure, reproduced with a read-only directory. Skipped under root, for
-# which `-w` is always true and the directory could never be unwritable — the check would
-# pass for the wrong reason, so it passes by declining instead.
-check "an unwritable gh config directory is reported, not fatal" bash -c '
+# The repair, on the failure the UID remap produces: a directory owned by someone else. Both
+# this and the next check decline under root (where every directory is writable, so there is
+# nothing to repair) and when passwordless sudo is unavailable, since setting the scene needs
+# it too — they pass by declining rather than for the wrong reason. Asserted on the effect:
+# the directory is now ours and a file can be created in it.
+check "a gh config directory owned by someone else is repaired" bash -c '
     set -e
-    if [ "$(id -u)" -eq 0 ]; then exit 0; fi
-    d="$(mktemp -d)"; chmod 0500 "${d}"
-    out="$(GH_CONFIG_DIR="${d}" bash -c ". /usr/local/share/devbase/setup.sh; devbase_check_gh_config_dir" 2>&1)"
-    chmod 0700 "${d}"; rmdir "${d}"
-    printf "%s" "${out}" | grep -qF "not writable"'
+    if [ "$(id -u)" -eq 0 ] || ! sudo -n true 2>/dev/null; then exit 0; fi
+    d="$(mktemp -d)"
+    sudo chown root:root "${d}"; sudo chmod 0755 "${d}"
+    GH_CONFIG_DIR="${d}" bash -c ". /usr/local/share/devbase/setup.sh; devbase_setup_gh_config_dir" >/dev/null 2>&1
+    [ -O "${d}" ]
+    : >"${d}/.probe"
+    rm -rf "${d}"'
+
+# When the repair cannot happen (no passwordless sudo), the function must say so and still
+# return 0 — a container that refuses to come up over this is not fixable from a terminal.
+# A stub `sudo` that always fails stands in for that; `set -e` makes a non-zero return fail
+# the check, and the directory is cleaned up with the real sudo.
+check "an unrepairable gh config directory is reported, not fatal" bash -c '
+    set -e
+    if [ "$(id -u)" -eq 0 ] || ! sudo -n true 2>/dev/null; then exit 0; fi
+    d="$(mktemp -d)"; stubs="$(mktemp -d)"
+    printf "#!/bin/sh\nexit 1\n" >"${stubs}/sudo"; chmod +x "${stubs}/sudo"
+    sudo chown root:root "${d}"; sudo chmod 0755 "${d}"
+    out="$(PATH="${stubs}:${PATH}" GH_CONFIG_DIR="${d}" bash -c ". /usr/local/share/devbase/setup.sh; devbase_setup_gh_config_dir" 2>&1)"
+    sudo rm -rf "${d}"; rm -rf "${stubs}"
+    printf "%s" "${out}" | grep -qF "could not be repaired"'
 
 # devbase_setup_ssh_commit_signing repairs the one failure a mounted host ~/.gitconfig
 # guarantees: it names a user.signingkey under the host's ~/.ssh, which the container does

@@ -103,8 +103,10 @@ environment.
     describe that option as controlling the volume.
   - **Keep the path identical in three places** — `containerEnv.GH_CONFIG_DIR`, the mount
     target and `GH_CONFIG_DIR_PATH` in `install.sh`; `pnpm features:validate` fails on a
-    mismatch. `install.sh` must create it owned by the remote user, because Docker seeds
-    ownership only into an empty volume.
+    mismatch. `install.sh` creates it owned by the remote user, but that is not enough: the
+    CLI remaps the remote user to the host UID and re-owns only `$HOME`, so post-create
+    repairs the directory with `sudo -n chown` (`devbase_setup_gh_config_dir`) and reports
+    and skips when it cannot.
 - **`installsAfter` orders, `dependsOn` installs.** `installsAfter` is only a hint: it
   sequences a feature the consumer already listed and does nothing when they did not, so
   it suits the language runtimes — devbase must not install those, only run after them. A
