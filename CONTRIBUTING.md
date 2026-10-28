@@ -39,7 +39,7 @@ overwritten or collides with the next release.
 What that means is that **your commit type decides what consumers get**, so pick it
 deliberately:
 
-| Commit                                  | Result for a consumer pinned to `:1`                  |
+| Commit                                  | Result for a consumer pinned to `:2`                  |
 | --------------------------------------- | ----------------------------------------------------- |
 | `fix(devbase): …`                       | patch — picked up on their next rebuild               |
 | `feat(devbase): …`                      | minor — picked up on their next rebuild               |
@@ -48,7 +48,7 @@ deliberately:
 
 A removed or renamed option, or a changed default that alters what an existing consumer
 already gets, is a `BREAKING CHANGE:` and needs a migration note in the README. Anything
-inside `1.x` reaches every repository automatically, so the major is a real contract.
+inside `2.x` reaches every repository automatically, so the major is a real contract.
 
 And one rule that is yours, not the tooling's:
 
