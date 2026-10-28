@@ -1,3 +1,10 @@
+## [2.1.1](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v2.1.0...v2.1.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **devbase:** repair the gh config directory's ownership after a UID remap ([9399e98](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/9399e98edfe622512a4b35e5f57fccd93e5cf117))
+
 # [2.1.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v2.0.2...v2.1.0) (2026-10-28)
 
 
