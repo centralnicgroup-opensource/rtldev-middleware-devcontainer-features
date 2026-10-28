@@ -108,7 +108,8 @@ What it does, on first create and on every attach:
   two fields CI reads, in the same order, so the container and the pipeline cannot
   disagree
 - **npm** raised to the major `engines.npm` names, for the floor no Node release bundles
-- **`gh` credential helper** wired into the workspace's git config
+- **`gh` credential helper** wired into the workspace's git config, with the `gh` login kept
+  in a per-container volume so it survives rebuilds
 - **Persistent shell history** across container rebuilds
 - **Dependency installation** — `composer.json` via composer, `package.json` via pnpm,
   `.env` seeded from `.env.example`
@@ -155,12 +156,57 @@ What it does, on first create and on every attach:
 > codepoint exactly as `C` does, so `sort` and `[a-z]` ranges in existing scripts are
 > unaffected. Only the charmap changes.
 >
-> There is no option for it, on the same reasoning that keeps `mounts` unused: `containerEnv`
+> There is no option for it, on the same reasoning that makes the `gh` login volume unconditional: `containerEnv`
 > is static JSON with no option substitution, so a flag could not switch it off and would
 > only be a lie. Set `containerEnv.LANG` in your own `devcontainer.json` to override — the
 > CLI emits the consumer's `containerEnv` after the feature layer, so it wins — and make
 > sure the locale you name exists in the image, because `setlocale` falls back to `C` in
 > silence when it does not.
+
+### The gh login
+
+The `ghCredentialHelper` step points git at `gh auth git-credential`, so git over HTTPS is
+only as logged in as `gh` is. Before RSRMID-3096 the login lived in `~/.config/gh` inside
+the container and nothing persisted it: every rebuild was logged out, and every push failed
+with `could not read Username ... terminal prompts disabled` until someone ran
+`gh auth login` again.
+
+The Feature now keeps the login in a **per-container named volume**:
+
+- `containerEnv.GH_CONFIG_DIR` is `/var/lib/devbase/gh`, which redirects `gh`.
+- `mounts` declares the named volume `devbase-gh-${devcontainerId}` at that path. It lives
+  on the container host, not in the image and not in the workspace, and no host path is
+  involved. `${devcontainerId}` is stable for one devcontainer, so a rebuild reattaches the
+  same volume while another repository gets its own.
+- The remote user's home varies by image, which is why the volume is not mounted at
+  `~/.config/gh`.
+
+**Lifecycle**
+
+- **First create:** `gh` is logged out. Run `gh auth login` once.
+- **Rebuild:** the login is still there. Nothing to do.
+- **Every attach:** a warning is printed, last, when `gh` holds no login (skipped in CI).
+  It reads the token locally and makes no network call, and it is independent of
+  `envInfoBanner`. A logged-in `gh` prints nothing.
+- **Reset:** remove the volume while the container is gone —
+  `docker volume rm devbase-gh-<devcontainerId>` — and rebuild.
+
+**Ownership failure.** Docker copies the image's ownership into a volume only when the
+volume is _empty_. `install.sh` creates the directory owned by the remote user, so a fresh
+volume is writable. A volume that already existed with another owner stays that way, and
+post-create then reports `GH_CONFIG_DIR ... is missing or not writable`. Fix it with
+`sudo chown -R "$(id -un)" /var/lib/devbase/gh`, or remove the volume and rebuild.
+
+**No option switches the volume off**, and that includes `ghCredentialHelper: false`:
+`mounts` and `containerEnv` are static JSON with no option substitution, so a flag could
+not control them. The option only controls whether git is pointed at `gh` and whether the
+attach warning is shown. To opt out of the redirect, set your own `GH_CONFIG_DIR` in the
+repository's `containerEnv`; the CLI emits the consumer's `containerEnv` after the feature
+layer, so yours wins.
+
+```jsonc
+"containerEnv": { "GH_CONFIG_DIR": "/home/vscode/.config/gh" }
+```
 
 ## Why a Feature and not copied files
 
@@ -184,20 +230,20 @@ Getting a new version _into_ that lock is its own problem — see
 
 All optional; the defaults are what php-sdk and mcp-dis want.
 
-| Option                       | Default                                              | What it does                                                                                                                                                                                                                                                      |
-| ---------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `commonPackages`             | `true`                                               | Installs `wget jq git zip unzip curl zsh shellcheck`. Turn off for a base image that already has them.                                                                                                                                                            |
-| `timezone`                   | `Europe/Berlin`                                      | Written to `/etc/localtime` and `/etc/timezone`. Empty string leaves the image alone.                                                                                                                                                                             |
-| `globalPackages`             | `commitizen@latest,cz-conventional-changelog@latest` | Comma-separated global pnpm installs. Empty installs nothing.                                                                                                                                                                                                     |
-| `zshAutosuggestions`         | `true`                                               | Installs the zsh-autosuggestions plugin.                                                                                                                                                                                                                          |
-| `historyPersistence`         | `true`                                               | Symlinks `~/.zsh_history` to `/WSL_USER/.zsh_history`. Needs the frame to bind the host's `~/.zsh_history` at that path — the file, not the home directory; skipped silently if not.                                                                              |
-| `ghCredentialHelper`         | `true`                                               | Points the workspace git credential helper at `gh auth git-credential`.                                                                                                                                                                                           |
-| `sshCommitSigning`           | `true`                                               | Repairs SSH commit signing when a mounted host `~/.gitconfig` points `user.signingkey` at a key file the container lacks; uses the forwarded ssh-agent and writes an inline `key::` key to the workspace git config. Never enables signing you did not configure. |
-| `envInfoBanner`              | `true`                                               | Prints the toolchain banner on attach; also installs `devbase-env-info`.                                                                                                                                                                                          |
-| `installProjectDependencies` | `true`                                               | Installs from `composer.json` / `package.json` and seeds `.env` from `.env.example`.                                                                                                                                                                              |
-| `autoloadEnvScript`          | `true`                                               | Sources a workspace `env.sh` from `~/.zshenv` so new terminals inherit it.                                                                                                                                                                                        |
-| `installRtk`                 | `true`                                               | Installs RTK, the token-optimizing CLI proxy for Claude Code. Binary only — the hook stays in the mounted `~/.claude`.                                                                                                                                            |
-| `rtkVersion`                 | `0.45.0`                                             | RTK release to install, without the leading `v`. Checksum-verified against the release's `checksums.txt`.                                                                                                                                                         |
+| Option                       | Default                                              | What it does                                                                                                                                                                                                                                                          |
+| ---------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `commonPackages`             | `true`                                               | Installs `wget jq git zip unzip curl zsh shellcheck`. Turn off for a base image that already has them.                                                                                                                                                                |
+| `timezone`                   | `Europe/Berlin`                                      | Written to `/etc/localtime` and `/etc/timezone`. Empty string leaves the image alone.                                                                                                                                                                                 |
+| `globalPackages`             | `commitizen@latest,cz-conventional-changelog@latest` | Comma-separated global pnpm installs. Empty installs nothing.                                                                                                                                                                                                         |
+| `zshAutosuggestions`         | `true`                                               | Installs the zsh-autosuggestions plugin.                                                                                                                                                                                                                              |
+| `historyPersistence`         | `true`                                               | Symlinks `~/.zsh_history` to `/WSL_USER/.zsh_history`. Needs the frame to bind the host's `~/.zsh_history` at that path — the file, not the home directory; skipped silently if not.                                                                                  |
+| `ghCredentialHelper`         | `true`                                               | Points the workspace git credential helper at `gh auth git-credential`, and warns on attach when `gh` is logged out. The login persists in the `devbase-gh-${devcontainerId}` volume (`GH_CONFIG_DIR`), which is unconditional: it applies even when this is `false`. |
+| `sshCommitSigning`           | `true`                                               | Repairs SSH commit signing when a mounted host `~/.gitconfig` points `user.signingkey` at a key file the container lacks; uses the forwarded ssh-agent and writes an inline `key::` key to the workspace git config. Never enables signing you did not configure.     |
+| `envInfoBanner`              | `true`                                               | Prints the toolchain banner on attach; also installs `devbase-env-info`.                                                                                                                                                                                              |
+| `installProjectDependencies` | `true`                                               | Installs from `composer.json` / `package.json` and seeds `.env` from `.env.example`.                                                                                                                                                                                  |
+| `autoloadEnvScript`          | `true`                                               | Sources a workspace `env.sh` from `~/.zshenv` so new terminals inherit it.                                                                                                                                                                                            |
+| `installRtk`                 | `true`                                               | Installs RTK, the token-optimizing CLI proxy for Claude Code. Binary only — the hook stays in the mounted `~/.claude`.                                                                                                                                                |
+| `rtkVersion`                 | `0.45.0`                                             | RTK release to install, without the leading `v`. Checksum-verified against the release's `checksums.txt`.                                                                                                                                                             |
 
 A stack elaborate enough to own its own setup turns the generic part off:
 
@@ -379,6 +425,7 @@ works. The working tree is exercised by the test suite instead:
 ```sh
 pnpm features:test                        # default options + every scenario, real builds
 pnpm features:test -- --filter minimal    # one scenario, while iterating
+pnpm features:test:rebuild                # the gh login survives a container rebuild
 pnpm features:lint                        # shellcheck + metadata validation
 pnpm lint:workflows                       # actionlint over .github/workflows
 pnpm lint                                 # all of the above plus prettier
@@ -393,6 +440,12 @@ the jobs that does not run. It downloads a pinned, checksum-verified actionlint 
 `pnpm features:test` builds real containers straight from `features/src/`, so it is the
 iteration loop — no publish, no copy, nothing to keep in sync. It needs a Docker daemon,
 which is why the devcontainer includes docker-in-docker.
+
+`pnpm features:test:rebuild` is separate because the suite builds one container per
+scenario and never rebuilds, and "the gh login is still there after a rebuild" only exists
+across two builds. It brings up a scratch workspace consuming the working-tree Feature,
+seeds a login, rebuilds with `--remove-existing-container` and checks the same volume
+carries it over. It needs Docker too, and runs as its own job in `test-features.yml`.
 
 ### Running the working-tree Feature in your own container
 
@@ -656,6 +709,13 @@ is the `${localEnv:HOME}${localEnv:USERPROFILE}` idiom once used to name the hos
 it relies on exactly one of the two being set, and concatenates them into a nonexistent
 path when both are. Moving to the single-file bind above removes the idiom along with the
 mount that needed it.
+
+**`could not read Username ... terminal prompts disabled` on a git push or pull.** `gh` is
+logged out, and the credential helper has nothing to hand git. Run `gh auth login` once; the
+login lives in the `devbase-gh-${devcontainerId}` volume and survives rebuilds. The attach
+warning exists to say exactly this. If the login does not stick, or post-create reports
+`GH_CONFIG_DIR ... not writable`, the volume predates the Feature's ownership setup — see
+[The gh login](#the-gh-login).
 
 **`pnpm: command not found` in post-create.** No Node toolchain in the container. Add
 `ghcr.io/devcontainers/features/node:2` — `installsAfter` then guarantees it is installed

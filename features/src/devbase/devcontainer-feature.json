@@ -35,7 +35,7 @@
     "ghCredentialHelper": {
       "type": "boolean",
       "default": true,
-      "description": "Point the workspace's git credential helper at `gh auth git-credential`, replacing the system-level VS Code helper."
+      "description": "Point the workspace's git credential helper at `gh auth git-credential`, replacing the system-level VS Code helper. The gh login is kept in a per-container named volume (GH_CONFIG_DIR=/var/lib/devbase/gh) so it survives rebuilds, and a logged-out gh is warned about on every attach. The volume and GH_CONFIG_DIR are static and apply even with this option off, because mounts and containerEnv take no option substitution; a consumer opts out of the redirect (not the volume) by setting GH_CONFIG_DIR in their own containerEnv."
     },
     "sshCommitSigning": {
       "type": "boolean",
@@ -69,8 +69,16 @@
     }
   },
   "containerEnv": {
-    "LANG": "C.UTF-8"
+    "LANG": "C.UTF-8",
+    "GH_CONFIG_DIR": "/var/lib/devbase/gh"
   },
+  "mounts": [
+    {
+      "source": "devbase-gh-${devcontainerId}",
+      "target": "/var/lib/devbase/gh",
+      "type": "volume"
+    }
+  ],
   "customizations": {
     "vscode": {
       "extensions": [

@@ -337,6 +337,61 @@ check "gh credential helper skips outside a git tree" bash -c '
     . /usr/local/share/devbase/setup.sh
     devbase_setup_gh_credential_helper | grep -q "Not a git working tree"'
 
+# --- the gh login survives a rebuild (RSRMID-3096) ------------------------------
+# The credential helper only forwards to gh, and gh's login lived in ~/.config/gh, which
+# nothing persisted: every rebuilt container was logged out and every HTTPS git operation
+# failed with "terminal prompts disabled". The manifest now mounts a named volume and points
+# GH_CONFIG_DIR at it. The three checks below are the chain that has to hold, asserted on the
+# container itself because `devcontainer features test` applies the Feature's mounts and
+# containerEnv — a broken link in it would otherwise only show up as a logged-out gh after
+# the *second* build, which no single-build test would ever see.
+check "GH_CONFIG_DIR points at the devbase gh volume path" \
+    bash -c '[ "${GH_CONFIG_DIR}" = "/var/lib/devbase/gh" ]'
+
+# A mount, not merely a directory: install.sh creates the path either way, so only
+# mountinfo can tell a volume from the image layer that would be thrown away on rebuild.
+check "the gh config directory is a mount, not just a directory" \
+    bash -c 'grep -qF " /var/lib/devbase/gh " /proc/self/mountinfo'
+
+# Writable by the remote user, proven by writing. This is the ownership failure the
+# install.sh `install -d -o` exists for: a root-owned volume makes `gh auth login` fail with
+# "permission denied", and nothing before this check would have noticed.
+check "the gh config directory is writable by the remote user" bash -c '
+    set -e
+    probe="${GH_CONFIG_DIR}/.test-probe"
+    : >"${probe}"
+    rm -f "${probe}"'
+
+# Logged out. The environment is stripped of every way gh could find a token (GH_TOKEN,
+# GITHUB_TOKEN) and of CI, which makes the check skip by design, and gh is pointed at an
+# empty directory. The credential helper has to survive the warning, because the warning is
+# only useful if the helper that causes the failure is the one still configured.
+check "a logged-out gh is warned about, and the helper stays configured" bash -c '
+    set -e
+    rm -rf /tmp/ghoutws && mkdir -p /tmp/ghoutws && cd /tmp/ghoutws && git init -q .
+    out="$(env -u GH_TOKEN -u GITHUB_TOKEN -u CI -u GITHUB_ACTIONS GH_CONFIG_DIR="$(mktemp -d)" bash -c ". /usr/local/share/devbase/setup.sh; devbase_setup_gh_credential_helper >/dev/null; devbase_check_gh_login" 2>&1)"
+    printf "%s" "${out}" | grep -qF "gh auth login"
+    git config --local --get-all credential.helper | grep -qxF "!gh auth git-credential"'
+
+# The negative that keeps the check above honest: an implementation that warned
+# unconditionally would pass it. A token in the environment is "logged in" to gh, and
+# `gh auth token` reads it locally, so this needs no network and no real credential.
+check "a logged-in gh is not warned about" bash -c '
+    set -e
+    out="$(env -u GITHUB_TOKEN -u CI -u GITHUB_ACTIONS GH_TOKEN=dummy GH_CONFIG_DIR="$(mktemp -d)" bash -c ". /usr/local/share/devbase/setup.sh; devbase_check_gh_login" 2>&1)"
+    ! printf "%s" "${out}" | grep -qF "gh auth login"'
+
+# The ownership failure, reproduced with a read-only directory. Skipped under root, for
+# which `-w` is always true and the directory could never be unwritable — the check would
+# pass for the wrong reason, so it passes by declining instead.
+check "an unwritable gh config directory is reported, not fatal" bash -c '
+    set -e
+    if [ "$(id -u)" -eq 0 ]; then exit 0; fi
+    d="$(mktemp -d)"; chmod 0500 "${d}"
+    out="$(GH_CONFIG_DIR="${d}" bash -c ". /usr/local/share/devbase/setup.sh; devbase_check_gh_config_dir" 2>&1)"
+    chmod 0700 "${d}"; rmdir "${d}"
+    printf "%s" "${out}" | grep -qF "not writable"'
+
 # devbase_setup_ssh_commit_signing repairs the one failure a mounted host ~/.gitconfig
 # guarantees: it names a user.signingkey under the host's ~/.ssh, which the container does
 # not have, and git then refuses every commit. The whole point is that a signature comes

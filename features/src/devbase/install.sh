@@ -179,6 +179,20 @@ mkdir -p "${SHARE_DIR}"
 cp -R "${FEATURE_DIR}/lib/." "${SHARE_DIR}/"
 chmod 0644 "${SHARE_DIR}"/*.sh
 
+# --- gh config directory ------------------------------------------------------
+# The manifest mounts a named volume here and points GH_CONFIG_DIR at it, so the gh login
+# survives a rebuild (RSRMID-3096). The remote user's home varies by image, which is why it
+# is not ~/.config/gh. THIS PATH MUST EQUAL the mount target and containerEnv.GH_CONFIG_DIR
+# in devcontainer-feature.json — `pnpm features:validate` fails when the three disagree.
+#
+# Created here, owned by the remote user, because Docker seeds an *empty* named volume from
+# the image's content at the mount target, ownership and mode included. Without this the
+# volume comes up root-owned and `gh auth login` dies with "permission denied". Mode 0700:
+# it holds an OAuth token.
+GH_CONFIG_DIR_PATH="/var/lib/devbase/gh"
+echo "devbase: creating ${GH_CONFIG_DIR_PATH} for the gh login volume"
+install -d -m 0700 -o "${USERNAME}" -g "${USERNAME}" "${GH_CONFIG_DIR_PATH}"
+
 install -m 0755 "${FEATURE_DIR}/bin/devbase-post-create.sh" /usr/local/bin/devbase-post-create.sh
 install -m 0755 "${FEATURE_DIR}/bin/devbase-post-attach.sh" /usr/local/bin/devbase-post-attach.sh
 install -m 0755 "${FEATURE_DIR}/lib/env-info.sh" /usr/local/bin/devbase-env-info

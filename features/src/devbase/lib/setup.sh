@@ -502,6 +502,64 @@ devbase_setup_gh_credential_helper() {
     fi
 }
 
+# devbase_check_gh_config_dir — verify the gh login volume is usable by this user.
+#
+# The manifest mounts a named volume at GH_CONFIG_DIR so the gh login survives a rebuild.
+# install.sh creates the mount target owned by the remote user, and Docker copies that
+# ownership into an *empty* volume — but only an empty one. A volume that already existed
+# (an earlier devbase, another user, a manual `docker run`) keeps whatever owner it had, and
+# then `gh auth login` fails with "permission denied" far from the cause. Unconditional,
+# like the volume itself: it does not depend on ghCredentialHelper.
+#
+# Report-and-skip: never sudo, never fatal. Success is logged only after a real write, since
+# `[ -w ]` says nothing about a read-only mount or a full disk.
+devbase_check_gh_config_dir() {
+    local dir="${GH_CONFIG_DIR:-}"
+    if [ -z "${dir}" ]; then
+        log_detail "GH_CONFIG_DIR is not set — gh keeps its login in ~/.config/gh"
+        return 0
+    fi
+
+    local probe=""
+    if [ -d "${dir}" ] && [ -w "${dir}" ]; then
+        probe="$(mktemp "${dir}/.devbase-probe.XXXXXX" 2>/dev/null)" || probe=""
+    fi
+
+    if [ -z "${probe}" ]; then
+        log_error "GH_CONFIG_DIR ${dir} is missing or not writable by $(id -un) — the gh login cannot be saved. Likely the volume devbase-gh-<devcontainerId> already existed with another owner (Docker sets ownership only on an empty volume). Fix: sudo chown -R \"$(id -un)\" ${dir}, or remove that volume and rebuild"
+        return 0
+    fi
+
+    rm -f "${probe}"
+    log_success "gh config directory ${dir} is writable by $(id -un)"
+}
+
+# devbase_check_gh_login — warn on attach when gh holds no login.
+#
+# The credential helper points git at gh, so a logged-out gh turns every HTTPS git
+# operation into "could not read Username ... terminal prompts disabled". Nothing else says
+# so, and a rebuilt container used to be logged out every time.
+#
+# `gh auth token`, not `gh auth status`: the token read is local and honours GH_TOKEN, while
+# status makes a network call, which on every attach would make a flaky network a slow
+# attach. Silent when logged in so the attach output stays quiet. Always returns 0 — it runs
+# on every attach and must never be able to block one. Goes to stderr like log_error, with
+# the same NO_COLOR/non-tty handling because it uses the same colour variables.
+devbase_check_gh_login() {
+    if _devbase_in_ci; then
+        return 0
+    fi
+    if ! command_exists gh; then
+        log_detail "gh is not installed — skipping the login check"
+        return 0
+    fi
+    if gh auth token >/dev/null 2>&1; then
+        return 0
+    fi
+    log_error "gh is not logged in, so git over HTTPS will fail until you run: gh auth login (the login persists across container rebuilds)"
+    return 0
+}
+
 # devbase_setup_ssh_commit_signing — make an already-configured SSH signing key
 # usable inside the container.
 #

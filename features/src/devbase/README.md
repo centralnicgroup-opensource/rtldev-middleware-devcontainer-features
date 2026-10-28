@@ -20,7 +20,7 @@ Shared devcontainer behaviour for RTLDEV middleware repositories: zsh with the t
 | globalPackages | Comma-separated packages to install globally with pnpm on first create. Empty string installs nothing. | string | commitizen@latest,cz-conventional-changelog@latest |
 | zshAutosuggestions | Install the zsh-autosuggestions plugin. Suggestions are driven by $HISTFILE, so they survive container rebuilds when historyPersistence is on. | boolean | true |
 | historyPersistence | Symlink ~/.zsh_history to /WSL_USER/.zsh_history so shell history survives rebuilds. Needs the frame to bind the host's ~/.zsh_history at that path — the file itself, not the home directory it sits in; skipped silently when that mount is absent, and always skipped in CI. | boolean | true |
-| ghCredentialHelper | Point the workspace's git credential helper at `gh auth git-credential`, replacing the system-level VS Code helper. | boolean | true |
+| ghCredentialHelper | Point the workspace's git credential helper at `gh auth git-credential`, replacing the system-level VS Code helper. The gh login is kept in a per-container named volume (GH_CONFIG_DIR=/var/lib/devbase/gh) so it survives rebuilds, and a logged-out gh is warned about on every attach. The volume and GH_CONFIG_DIR are static and apply even with this option off, because mounts and containerEnv take no option substitution; a consumer opts out of the redirect (not the volume) by setting GH_CONFIG_DIR in their own containerEnv. | boolean | true |
 | sshCommitSigning | Repair SSH commit signing when the frame brings a host ~/.gitconfig whose user.signingkey names a key file the container does not have. Reads the forwarded ssh-agent and writes an inline `key::` signing key to the workspace's local git config. Never enables signing that was not already configured, and never writes to ~/.ssh or the host's gitconfig. | boolean | true |
 | envInfoBanner | Print the toolchain banner on every attach, configured by .devcontainer/env-info.conf in the workspace. Also installs `devbase-env-info` for running it by hand. | boolean | true |
 | installProjectDependencies | On first create, install dependencies for whatever manifests exist in the workspace: composer.json via composer, package.json via pnpm, and seed .env from .env.example. Set false for repositories whose setup is non-standard enough to own the whole step. | boolean | true |
@@ -133,7 +133,7 @@ time; this fixes the ones that have not hit it yet.
   charmap changes.
 
 **No option switches it off**, deliberately. `containerEnv` is static JSON with no option
-substitution — the same property that keeps `mounts` unused here — so a flag could not
+substitution — the same property that makes the gh login volume unconditional — so a flag could not
 actually control it and would only be a lie. Override it in your own `devcontainer.json`
 instead; the CLI emits the consumer's `containerEnv` after the feature layer, so yours
 wins:
@@ -144,6 +144,51 @@ wins:
 
 Do check the locale exists in your image before naming a generated one. `setlocale` falls
 back to `C` in silence when it does not, which looks exactly like the bug this fixes.
+
+## The gh login
+
+The `ghCredentialHelper` step points git at `gh auth git-credential`, so git over HTTPS is
+only as logged in as `gh` is. Before RSRMID-3096 the login lived in `~/.config/gh` inside
+the container and nothing persisted it: every rebuild was logged out, and every push failed
+with `could not read Username ... terminal prompts disabled` until someone ran
+`gh auth login` again.
+
+The Feature now keeps the login in a **per-container named volume**:
+
+- `containerEnv.GH_CONFIG_DIR` is `/var/lib/devbase/gh`, which redirects `gh`.
+- `mounts` declares the named volume `devbase-gh-${devcontainerId}` at that path. It lives
+  on the container host, not in the image and not in the workspace, and no host path is
+  involved. `${devcontainerId}` is stable for one devcontainer, so a rebuild reattaches the
+  same volume while another repository gets its own.
+- The remote user's home varies by image, which is why the volume is not mounted at
+  `~/.config/gh`.
+
+**Lifecycle**
+
+- **First create:** `gh` is logged out. Run `gh auth login` once.
+- **Rebuild:** the login is still there. Nothing to do.
+- **Every attach:** a warning is printed, last, when `gh` holds no login (skipped in CI).
+  It reads the token locally and makes no network call, and it is independent of
+  `envInfoBanner`. A logged-in `gh` prints nothing.
+- **Reset:** remove the volume while the container is gone —
+  `docker volume rm devbase-gh-<devcontainerId>` — and rebuild.
+
+**Ownership failure.** Docker copies the image's ownership into a volume only when the
+volume is _empty_. `install.sh` creates the directory owned by the remote user, so a fresh
+volume is writable. A volume that already existed with another owner stays that way, and
+post-create then reports `GH_CONFIG_DIR ... is missing or not writable`. Fix it with
+`sudo chown -R "$(id -un)" /var/lib/devbase/gh`, or remove the volume and rebuild.
+
+**No option switches the volume off**, and that includes `ghCredentialHelper: false`:
+`mounts` and `containerEnv` are static JSON with no option substitution, so a flag could
+not control them. The option only controls whether git is pointed at `gh` and whether the
+attach warning is shown. To opt out of the redirect, set your own `GH_CONFIG_DIR` in the
+repository's `containerEnv`; the CLI emits the consumer's `containerEnv` after the feature
+layer, so yours wins.
+
+```jsonc
+"containerEnv": { "GH_CONFIG_DIR": "/home/vscode/.config/gh" }
+```
 
 ## Overriding the VS Code settings
 

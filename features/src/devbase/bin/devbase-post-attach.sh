@@ -4,12 +4,14 @@
 # devbase Feature — postAttachCommand.
 #
 # Runs on every VS Code attach, as the remote user, with cwd set to the workspace
-# folder. Two jobs:
+# folder. Three jobs:
 #
 #   1. If the workspace root has an env.sh, add a one-time source line to
 #      ~/.zshenv so every new integrated terminal inherits the workspace
 #      variables without a manual `source env.sh`.
 #   2. Print the toolchain banner, so the active versions are visible on attach.
+#   3. Warn when gh holds no login (ghCredentialHelper on), since git over HTTPS then
+#      fails until `gh auth login` is run.
 #
 # Unlike the per-repository post-attach.sh scripts this replaces, the workspace
 # path is discovered rather than hardcoded — that hardcoded line was the only
@@ -45,4 +47,18 @@ fi
 # somehow failed must never break the attach.
 if [ "${DEVBASE_ENV_INFO_BANNER:-true}" = "true" ] && [ -f "${SHARE_DIR}/env-info.sh" ]; then
     DEVBASE_WORKSPACE="${WORKSPACE}" zsh "${SHARE_DIR}/env-info.sh" || true
+fi
+
+# Last, so the warning is the final thing on screen rather than scrolled off by the banner,
+# and independent of envInfoBanner: switching the banner off must not silence it. Gated on
+# the credential helper, because that is what makes a logged-out gh break git. setup.sh only
+# defines functions (and sources log.sh), so sourcing it here runs nothing. `|| true` and
+# the -f guards: a missing library or a failing check must never break an attach.
+if [ "${DEVBASE_GH_CREDENTIAL_HELPER:-true}" = "true" ] &&
+    [ -f "${SHARE_DIR}/log.sh" ] && [ -f "${SHARE_DIR}/setup.sh" ]; then
+    # shellcheck source=../lib/log.sh
+    . "${SHARE_DIR}/log.sh"
+    # shellcheck source=../lib/setup.sh
+    . "${SHARE_DIR}/setup.sh"
+    devbase_check_gh_login || true
 fi
