@@ -7,7 +7,7 @@
 # workflow copy had grown a directory/id check that the package.json script never had,
 # so `pnpm lint` passed on a mismatch CI would reject.
 #
-# Three things are checked:
+# Four things are checked:
 #
 #   1. The keys the publisher requires are present.
 #   2. The directory name equals the id, because the directory name is what appears in
@@ -18,6 +18,8 @@
 #      manifest default has any effect in a real build. A divergence is therefore
 #      invisible in CI and in production, and only shows up as a test that passes
 #      against a default the Feature does not actually ship.
+#   4. The gh config path agrees across the manifest's containerEnv, its volume mount and
+#      install.sh (see the check below).
 #
 # No `set -e`: every Feature and every option is checked before exiting, so one
 # mismatch does not hide the next.
@@ -93,6 +95,27 @@ for manifest in "${manifests[@]}"; do
                 "option '${option}': ${manifest} defaults to '${default}' but install.sh falls back to '${fallback}'"
         fi
     done < <(jq -r '.options // {} | to_entries[] | "\(.key)\t\(.value.default)"' "${manifest}")
+
+    # One path, stated in three places: containerEnv.GH_CONFIG_DIR (where gh looks), the
+    # target of the devbase-gh volume mount (where the login lands) and the directory
+    # install.sh creates with the remote user's ownership. Any one of them disagreeing is
+    # the failure mode — gh writes to a directory the volume does not cover, so the login is lost on
+    # rebuild, or to one install.sh never chowned, so it is root-owned and unwritable.
+    # Only checked for a Feature that declares GH_CONFIG_DIR, so one without the volume is
+    # not forced to carry it.
+    gh_env="$(jq -r '.containerEnv.GH_CONFIG_DIR // empty' "${manifest}")"
+    if [ -n "${gh_env}" ]; then
+        gh_mount="$(jq -r '[.mounts[]? | select((.source // "") | startswith("devbase-gh-")) | .target] | first // empty' "${manifest}")"
+        gh_install="$(sed -n 's/^GH_CONFIG_DIR_PATH="\([^"]*\)"$/\1/p' "${install_script}" | head -1)"
+        if [ "${gh_mount}" != "${gh_env}" ]; then
+            fail "${manifest}" \
+                "containerEnv.GH_CONFIG_DIR is '${gh_env}' but the devbase-gh mount targets '${gh_mount}'"
+        fi
+        if [ "${gh_install}" != "${gh_env}" ]; then
+            fail "${install_script}" \
+                "containerEnv.GH_CONFIG_DIR is '${gh_env}' but install.sh creates '${gh_install}'"
+        fi
+    fi
 done
 
 if [ "${failed}" -ne 0 ]; then

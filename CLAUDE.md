@@ -9,7 +9,7 @@
 This repository ships **devcontainer Features** for RTLDEV middleware repositories,
 published as OCI artifacts to `ghcr.io`. There is currently one Feature, `devbase`,
 which carries the shared devcontainer _behaviour_: zsh with the team prompt,
-commitizen, pnpm, the `gh` credential helper, persistent shell history, dependency
+commitizen, pnpm, the `gh` credential helper (and a persisted `gh` login), persistent shell history, dependency
 installation and the on-attach toolchain banner.
 
 - **Language:** shell (bash for build-time, zsh for the lifecycle hooks) plus JSON metadata
@@ -85,13 +85,26 @@ environment.
   `features/src/devbase/NOTES.md`, which `generate-docs` folds into the published README
   at publish time (so `features/src/devbase/README.md` is generated — edit `NOTES.md`,
   and keep the README in step by hand only to stay accurate before the next release).
-- **`mounts` is allowed but deliberately unused here.** It is static JSON with no option
-  substitution, so `historyPersistence: false` could not switch off a `/WSL_USER` mount
-  declared by this Feature — the opt-out would become a lie, the trap that cost
-  `installPnpm` its existence once the node dependency brought its own pnpm. It would also be un-declinable for
-  every consumer, and would bake the `${localEnv:HOME}${localEnv:USERPROFILE}` host-shape
-  trick into the published artifact. The Feature looks for `/WSL_USER` and skips when it is
-  absent instead — that absence is exactly what the report-and-skip rule exists for.
+- **`mounts` is allowed, and carries exactly one: the gh login volume** (RSRMID-3096).
+  It is static JSON with no option substitution, so `historyPersistence: false` could not
+  switch off a `/WSL_USER` mount declared by this Feature — the opt-out would become a lie,
+  the trap that cost `installPnpm` its existence once the node dependency brought its own
+  pnpm. It would also be un-declinable for every consumer, and would bake the
+  `${localEnv:HOME}${localEnv:USERPROFILE}` host-shape trick into the published artifact.
+  The Feature looks for `/WSL_USER` and skips when it is absent instead — that absence is
+  exactly what the report-and-skip rule exists for.
+  - **Never declare a host path, and never a mount an option would need to switch off.**
+  - **The one exception is a container-side named volume**, `devbase-gh-${devcontainerId}`
+    at `/var/lib/devbase/gh`, with `containerEnv.GH_CONFIG_DIR` pointing `gh` at it. It
+    names no host path and is scoped per devcontainer. A consumer can stop `gh` using it by
+    setting their own `GH_CONFIG_DIR` (their `containerEnv` is emitted last and wins), but
+    the volume itself still mounts — nothing can switch a Feature's mount off.
+  - **It is unconditional by design**, even with `ghCredentialHelper: false`. Do not
+    describe that option as controlling the volume.
+  - **Keep the path identical in three places** — `containerEnv.GH_CONFIG_DIR`, the mount
+    target and `GH_CONFIG_DIR_PATH` in `install.sh`; `pnpm features:validate` fails on a
+    mismatch. `install.sh` must create it owned by the remote user, because Docker seeds
+    ownership only into an empty volume.
 - **`installsAfter` orders, `dependsOn` installs.** `installsAfter` is only a hint: it
   sequences a feature the consumer already listed and does nothing when they did not, so
   it suits the language runtimes — devbase must not install those, only run after them. A
@@ -174,6 +187,10 @@ environment.
 - Assert on **effects**, not on log lines: that the symlink exists, that the helper is in
   the git config, that the dependency is installed — not that a message was printed.
   Recording an option value in `config.env` is not coverage of the step it configures.
+- **Keep the rebuild test separate from the features suite.** `pnpm features:test:rebuild`
+  (`scripts/test-gh-rebuild.sh`) builds a scratch workspace twice, because the suite builds
+  one container per scenario and cannot prove a login outlives a rebuild; it needs Docker
+  and has its own CI job.
 - **Check a new assertion against a broken implementation before trusting it.** Break the
   thing it guards, confirm the suite goes red and that the failing check is the one that
   names the behaviour, then restore. A check that cannot fail is worse than no check: it
@@ -183,6 +200,7 @@ environment.
 ```sh
 pnpm features:test                        # default options + every scenario
 pnpm features:test -- --filter minimal    # one scenario, while iterating
+pnpm features:test:rebuild                # gh login survives a rebuild (two builds)
 pnpm features:lint                        # shellcheck + metadata validation
 pnpm lint:workflows                       # actionlint over .github/workflows
 pnpm lint                                 # all of the above plus prettier

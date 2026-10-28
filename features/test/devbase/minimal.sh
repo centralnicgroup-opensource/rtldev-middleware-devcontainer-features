@@ -82,6 +82,19 @@ check "ssh signing is not repaired when the option is off" bash -c '
     [ "$(git config --local --get user.signingkey)" = "/nonexistent/.ssh/probe_key" ]
     ssh-agent -k >/dev/null'
 
+# The attach-time gh login warning belongs to ghCredentialHelper: it exists because the
+# helper makes a logged-out gh break git. With the option off nothing routes git through gh,
+# so the warning would be noise about a login the repository never asked for. Run for real
+# through post-attach, logged out and outside CI, so a warning that ignored the option
+# would be caught here. (The volume itself is unconditional and is asserted in test.sh.)
+check "ghCredentialHelper opt-out recorded" \
+    grep -q 'DEVBASE_GH_CREDENTIAL_HELPER="false"' /usr/local/share/devbase/config.env
+check "post-attach stays quiet about gh login when the helper is off" bash -c '
+    set -e
+    rm -rf /tmp/ghattachws && mkdir -p /tmp/ghattachws && cd /tmp/ghattachws
+    out="$(env -u GH_TOKEN -u GITHUB_TOKEN -u CI -u GITHUB_ACTIONS GH_CONFIG_DIR="$(mktemp -d)" zsh /usr/local/bin/devbase-post-attach.sh 2>&1)"
+    ! printf "%s" "${out}" | grep -qF "gh auth login"'
+
 # Every option here is empty or false, which makes this the scenario that proves the
 # escaping of the recorded values does not mangle an empty string into something
 # unparseable — post-create sources this file before it does anything else.
