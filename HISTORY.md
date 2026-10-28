@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v2.0.2...v2.1.0) (2026-10-28)
+
+
+### Features
+
+* **devbase:** persist the gh login across container rebuilds ([3911b5a](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/commit/3911b5aaadf44052ac99659eaff733cbf6822c51))
+
 ## [2.0.2](https://github.com/centralnicgroup-opensource/rtldev-middleware-devcontainer-features/compare/v2.0.1...v2.0.2) (2026-10-23)
 
 
